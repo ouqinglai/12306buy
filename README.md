@@ -7,13 +7,13 @@
 ## step
 
 ### login dama(云打码)
-![login dama](https://github.com/ouqinglai/12306buy/blob/master/screenshot/old_dama.png)
+![login dama](https://github.com/ouqinglai/12306buy/blob/old_dama/screenshot/old_dama.png)
 
 ### login 12306
-![login 12306](https://github.com/ouqinglai/12306buy/blob/master/screenshot/login.png)
+![login 12306](https://github.com/ouqinglai/12306buy/blob/old_dama/screenshot/login.png)
 
 ### write passenger information
-![main screen](https://github.com/ouqinglai/12306buy/blob/master/screenshot/main.png)
+![main screen](https://github.com/ouqinglai/12306buy/blob/old_dama/screenshot/main.png)
 
 ## chrome.notifications(桌面通知)
 
@@ -24,7 +24,7 @@
 ![tip box](https://github.com/ouqinglai/12306buy/blob/master/screenshot/tip.png)
 
 ### waiting for dama code
-![waiting for dama code](https://github.com/ouqinglai/12306buy/blob/master/screenshot/old_waitCode.png)
+![waiting for dama code](https://github.com/ouqinglai/12306buy/blob/old_dama/screenshot/old_waitCode.png)
 
 ### success!!
 ![addOrder success](https://github.com/ouqinglai/12306buy/blob/master/screenshot/success.png)

@@ -2,7 +2,7 @@
 12306buy chrome extension plugin 浏览器插件
 一键下单，自动通过验证码，带循环查票功能。后台运行，桌面通知
 * **browser :** 尽量使用最新360极速浏览器.
-* **passenger :** 请先到[https://kyfw.12306.cn/otn/passengers/addInit](12306)设置一个常用联系人.
+* **passenger :** 请先到[12306](https://kyfw.12306.cn/otn/passengers/addInit)设置一个常用联系人.
 
 ## step
 

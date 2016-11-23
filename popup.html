@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>test</title>
+	<style type="text/css">
+		body {
+			font-size: 15px;
+			color: #000;
+		}
+		form {
+			width: 200px;
+			display: none;
+			padding: 0 20px;
+		}
+		form input {
+			width: 100%;
+			height: 25px;
+		}
+		form > div {
+	        display: inline-block;
+		    width: 30.5%;
+		    margin: 5px 1%;
+		}
+		form div:before {
+			content :'*';
+			color: red;
+		}
+		#loginForm > div {
+			display: block;
+			width: 100%;
+		}
+		form h3 {
+			margin: 10px 0;
+			text-align: center;
+			/*font-size: 18px;*/
+		}
+		form h3:before , form h3:after {
+			content: '---';
+			padding: 0 10px;
+		}
+		.no-required:before {
+			content: '';
+		}
+		input[type="submit"] {
+		    display: block;
+		    width: 100px;
+		    margin: 20px auto;
+		    height: 30px;
+		}
+		input[type="radio"] , input[type="checkbox"] {
+		    width: 15px;
+		    vertical-align: -7px;
+		}
+		#order {
+			width: 600px;
+		}
+		form select {
+		    width: 100%;
+		    height: 31px;
+		}
+		input[name="loop"] {
+			display: none;
+			width: 98px;
+		}
+		input[value="inquiry"]:checked + input {
+			display: inline-block;
+		}
+		.tip {
+			/*display: none;*/
+			font-size: 13px;
+			color: #aaa2a2;
+		}
+		.form2 #loginForm {
+			display: block;
+		}
+		.form3 #order {
+			display: block;
+		}
+		.href {
+			color: red;
+			font-size: 13px;
+			font-weight: normal;
+		}
+	</style>
+	<script src="popup.js" defer="defer"></script>
+</head>
+<body>
+	<form id="loginForm">
+		<h3>12306登录</h3>
+		<div>用户名：<input type="text" name="user" required></div>
+		<div>密码：<input type="password" name="pwd" required></div>
+		<input type="submit" value="登录">
+	</form>
+
+	<form id="order">
+		<h3>常用联系人<a class="href" href="https://kyfw.12306.cn/otn/passengers/addInit">去设置</a></h3>
+		<div>姓名：<input type="text" id="passenger_name" name="name" required disabled></div>
+		<div>身份证：<input type="text" id="passenger_id_no" name="id" required disabled></div>
+		<div class="no-required">订票手机：<input type="text" id="mobile_no" name="mobile" placeholder="订票成功后接受短信" disabled></div>
+		<h3>火车信息</h3>
+		<div>
+			座位类型：
+			<select name="type">
+				<optgroup label="高铁/动车">
+					<option value="O">二等座</option>
+					<option value="M">一等座</option>
+					<option value="9">商务座</option>
+				</optgroup>
+				<optgroup label="火车">
+					<option value="1">硬座</option>
+					<option value="3">硬卧</option>
+					<option value="4">软卧</option>
+				</optgroup>
+			</select>
+		</div>
+		<div>出发地：<input type="text" name="from" placeholder="广州南" required value="广州"></div>
+		<div>目的地：<input type="text" name="to" placeholder="北京西" required value="珠海"></div>
+		<div>出发日期：<input type="date" name="to_date" placeholder="2016-11-15" required></div>
+		<div>坐车时间：<input type="time" name="time" placeholder="16:00" required></div>
+		<!-- <div class="no-required">时间区间：<input type="text" name="time_range" placeholder="[-1,1]表示允许15:00~17:00之间最快班次，-0.5为15:30"></div> -->
+		<h3>模式</h3>
+		<div class="no-required">下单：<input type="radio" name="mode" value="buy" checked="checked"></div>
+		<div class="no-required">
+			询票：
+			<input type="radio" name="mode" value="inquiry">
+			<input type="number" max="60" min="5" step="1" name="loop" placeholder="默认10秒循环">
+		</div>
+		<div class="no-required">可选无座：<input type="checkbox" name="can_noSeat"></div>
+		<span class="tip">
+			1、下单模式：<br>
+			&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;例如坐车时间：16:00&nbsp;&nbsp;&nbsp;&nbsp;座位类型：二等座&nbsp;&nbsp;&nbsp;&nbsp;无票时，如果下一班16:29二等座有票，则自动提交订单<br>
+			&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;如果下一班16:31二等座有票时，则弹框询问，不超过30分钟内的班次自动提交<br>
+			2、询票模式：每隔多少秒在后台查询有无票，当有票时桌面通知<br>
+			3、可选无座模式：首选二等座，次选无座
+		</span>
+		<input id="order_submit" type="submit" value="提交">
+	</form>
+</body>
+</html>

@@ -1,10 +1,13 @@
 var _ctx = 'https://kyfw.12306.cn/otn/'
+,	_yunma = 'http://api.yundama.com/api.php?'
+,	_array = [[34 , 64] , [106 , 64] , [180 , 62] , [254 , 59] , [36 , 136] , [106 , 135] , [183 , 135] , [246 , 139]]//图片验证码点击坐标
 ,	_module = { module : 'login' , rand : 'sjrand' }//图片验证码get请求参数
 ,	_baTime = '2016-11-15'//选往返程时用到，单程无用
 ,	_typeArray = {'M' : '一等座' , 'O' : '二等座' , '9' : '商务座' , '1' : '硬座' , '3' : '硬卧' , '4' : '软卧'}
 
 /*辅助变量*/
 var _tabId//返回给popup.html信息
+,	_cid
 ,	_isBuyMode//bool模式，buy：立即下单，inquiry：询票当有票时立即下单
 ,	_initMsgBox = false
 ,	_is_buy_noSeat//bool是否要买无座票，用于显示
@@ -13,8 +16,7 @@ var _tabId//返回给popup.html信息
 ,	_setTime//number,每隔多少s查询一次票
 ,	_noShowMsgBox = false//bool，让mosgBox消息框后台运行
 ,	_errorCount = 0//number,收集msgBox消息框错误提示次数
-,	_plugin//object's method imgBase64 => check's Code
-,	_isLoginFuncBind = false//login = login.bind(null , value)只执行一次
+,	_damaUser = JSON.parse(localStorage['dama'] || '{}')//object
 
 /*买票变量*/
 var _randCode = ''
@@ -31,19 +33,14 @@ var _randCode = ''
 ,	_carId//火车型号G123
 ,	_start_time = ''//string，出发时间
 
-window.onload = () => _plugin = document.querySelector('#pluginId')
-
 chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
-    _tabId = id
+	_tabId = id
 
     if(match === 'userLogin'){
-    	//放在最后执行，因为上面的login = login.bind(null , value)要判断是否已绑定value
-    	if(!_isLoginFuncBind) {
-    		_isLoginFuncBind = true
-    		login = login.bind(null , value)
-    	}
-		window.clearTimeout(_clearTimeout)
     	_module = { module : 'login' , rand : 'sjrand' }
+    	
+    	window.clearTimeout(_clearTimeout)
+        login = login.bind(null , value)
 		start()
     }else if (match === 'orderInfo') {
 		_randCode = ''
@@ -55,13 +52,11 @@ chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
 		_from = value.from
 		_to = value.to
 		_toTime = value.to_date
-		_time = [value.time , /*value.time_range*/]
-		_type = value.type
-
 		_passenger = value.name + ',1,'/*证件类型*/ + value.id/*身份证*/ + ','
 		//O,0,1,xxx,1,440682199310213272,,N
-		_passengerStr = _type + ',0,1,'/*0未知、1成人票*/ + _passenger + value.mobile + ',N'
-
+		_passengerStr = value.type + ',0,1,'/*0未知、1成人票*/ + _passenger + value.mobile + ',N'
+		_time = [value.time , /*value.time_range*/]
+		_type = value.type
 		_isBuyMode = value.mode === 'buy'
 		_can_noSeat = value.can_noSeat
 		_setTime = value.loop || 10//默认10s 询票一次
@@ -74,6 +69,8 @@ chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
 		queryTicket()
     }else if (match === 'iconClick') {
     	_noShowMsgBox = false
+    }else if (match === 'damaLogin') {
+    	localStorage['dama'] = JSON.stringify(_damaUser = value)
     }
 })
 
@@ -90,62 +87,8 @@ chrome.notifications.onClosed.addListener((id , byUser) => {
 	if(id === 'msgBox') _initMsgBox = false
 })
 
-//处理Provisional headers are shown请求
-// chrome.webRequest.onBeforeRequest.addListener(
-// 	({ url }) => ({ redirectUrl : url.replace(chrome.extension.getURL('') , 'http://check.huochepiao.360.cn/') }),
-//     { urls: [chrome.extension.getURL('img_vcode')] },
-//     ['blocking']
-// )
-
-//请求headers 添加Origin、Referer字段
-chrome.webRequest.onBeforeSendHeaders.addListener(({ url , requestHeaders }) => {
-		Array(
-			'loginAysnSuggest',
-			'submitOrderRequest',
-			'queryX',
-			'checkOrderInfo',
-			'confirmSingleForQueue',
-			'checkRandCodeAnsyn',
-			'getPassCodeNew',
-			'initDc',
-			'login/init',
-			'getPassengerDTOs',
-			'initMy12306',
-			'station_name'
-		).some(apiName => {
-			if(RegExp(apiName).test(url)) {
-				console.log(url)
-				return requestHeaders.push({
-					name: 'Origin',
-					value: 'https://kyfw.12306.cn'
-				} , {
-					name : 'Referer',
-					value : 'https://kyfw.12306.cn/otn/index/init'
-				})
-			}
-		})
-
-		return { requestHeaders }
-	},
-	{urls: ['*://*/otn/*'] },
-	['blocking' , 'requestHeaders']
-)
-
 //1、登录验证
-function start (isReLogin/*bool用于重新登录*/){
-	let cb = () => dataUrl(val => sendImg2Plugin(val , isReLogin))
-
-	//删除BIGipServerotn cookie，则图片验证码只需识别一个物品，此时用于登录，
-	//提交订单时的图片验证码一定是识别两个物品
-	if(_module.module === 'login') {
-		chrome.cookies.remove({
-			url : 'https://kyfw.12306.cn/otn/passcodeNew/',
-			name : 'BIGipServerotn',
-		})
-		
-		Fetch('https://kyfw.12306.cn/otn/login/init' , null , cb , 'text')
-	}else cb()
-}
+function start (isReLogin/*bool用于重新登录*/){ dataUrl(val => sendBlobAjax(dataURLtoBlob(val) , isReLogin)) }
 
 //2、验证成功后，登录
 function login (userLogin , cb){
@@ -153,11 +96,9 @@ function login (userLogin , cb){
 		'loginUserDTO.user_name' : userLogin.user,
 		'userDTO.password' : userLogin.pwd,
 		'randCode' : _randCode,
-	} , () => {
+	} , data => {
 		sendMsg(['loginCb'])
-
 		sendMsg(['msgCb' , '登录成功！' , 'login' , false])
-
 		cb && cb()
 	})
 }
@@ -165,7 +106,7 @@ function login (userLogin , cb){
 //3、查票
 function queryTicket (){
 	//GET
-	Fetch(_ctx + 'leftTicket/queryX?' + ObjStringData({//GET
+	Fetch(_ctx + 'leftTicket/queryX?' + ObjStringData({
 		'leftTicketDTO.train_date':_toTime,
 		'leftTicketDTO.from_station':_from[1],
 		'leftTicketDTO.to_station':_to[1],
@@ -197,7 +138,7 @@ function getTicketHtml (){
 
 		let isTimeout = ((new Date(_toTime + ' ' + _start_time).getTime() - new Date(_toTime + ' ' + _time[0]).getTime()) / 1000 / 60) > 30/*大于30分钟时要询问用户是否还买票*/
 		_isBuyMode && !isTimeout ? start() : createNotice()
-	} , 'text')
+	} , 1 , 1)
 }
 
 //6、先询问一下
@@ -236,7 +177,12 @@ function buy (){
 
 //验证图片结果是否正确
 function checkCode (position , isReLogin){
-	_randCode = position.replace(/[()]/g , '')
+	for(var i = 0 ; i < position.length ; i++) {
+		let p = _array[position[i] - 1]
+		_randCode += (p[0] + 3) + ',' + (p[1] - 16) + ','
+	}
+
+	_randCode = _randCode.slice(0 , _randCode.length - 1)
 
 	Fetch(_ctx + 'passcodeNew/checkRandCodeAnsyn' , {
 		randCode : _randCode,
@@ -251,94 +197,119 @@ function checkCode (position , isReLogin){
 			} , 500)
 		}
 		else {
+			codeError()
 			_randCode = ''
-			start(isReLogin)
+			start()
 		}
 	})
 }
 
 //获取验证码图片
 function dataUrl (cb){
-	var d = new FileReader
+	let img = new Image()
+	,	canvas = document.createElement('canvas')
+    ,	ctx = canvas.getContext('2d')
 
-	d.onload = () => cb(d.result.replace('data:image/jpeg;base64,' , ''))
-	
-	Fetch(_ctx + 'passcodeNew/getPassCodeNew?' + ObjStringData(_module) , null , res => d.readAsDataURL(res) , 'blob')
+    img.setAttribute('crossOrigin', 'anonymous')
+    img.onload = () => {
+        canvas.width = 293
+        canvas.height = 190
+        ctx.drawImage(img , 0 , 0 , 293 , 190)
+        cb(canvas.toDataURL('image/jpeg'))
+    }
+	img.src = _ctx + 'passcodeNew/getPassCodeNew?' + ObjStringData(_module) + '&' + +new Date
 }
 
 //获取验证码结果
-function sendImg2Plugin (imgBase64 , isReLogin){
-	// Fetch('/img_vcode' , JSON.stringify({
-	// 	img_buf: imgBase64,
-	// 	type: 'D',
-	// 	logon: _module.module === 'login' ? 1 : 0,//1代表识别1个物品，0代表2个
-	// 	check: _plugin.GetSig(imgBase64)
-	// }) , ({ res }) => {
-	// 	sendMsg(['msgCb' , 'code：' + res , '获取验证码结果'])
-	// 	res ? checkCode(res , isReLogin) : start(isReLogin)
-	// })
+function sendBlobAjax (blob , isReLogin){
+    var fd = new FormData()
+    ,	count = 1
 
-	/*XMLHttpRequest Origin 有效*/
+    fd.append('file' , blob , 'image.jpeg')
+    fd.append('username' , _damaUser.username)
+    fd.append('password' , _damaUser.password)
+    fd.append('codetype' , '6701')
+    fd.append('appid' , '1')
+    fd.append('appkey' , '22cc5376925e9387a23cf797cb9ba745')
+    fd.append('timeout' , '60')
 
-	var xhr = new XMLHttpRequest
- 
-	xhr.open('POST' , 'http://check.huochepiao.360.cn/img_vcode?' + +new Date , true)
+    Fetch(_yunma + 'method=upload' , fd , isRight , 0)
 
-	// xhr.timeout = 3000
+    function getResult (){
+    	Fetch(_yunma + 'cid=' + _cid + '&method=result' , null , isRight)
+    }
+	
+	function isRight (data){
+		sendMsg(['msgCb' , '打码：' + count++ + '次' , '获取验证码结果'])
 
-	xhr.setRequestHeader('Content-Type' , 'application/x-www-form-urlencoded')
-
-	xhr.onreadystatechange = () => {
-	    if (xhr.readyState == 4) {
-	    	if(xhr.status == 200) {
-	            let res = JSON.parse(xhr.responseText).res
-	 
-	            sendMsg(['msgCb' , 'code：' + res , '获取验证码结果'])
-
-				res ? checkCode(res , isReLogin) : start(isReLogin)
-	    	}else {
-	    		console.log(xhr)
-	    	}
-	    }
+		if(data['text']){
+        	checkCode(data['text'] , isReLogin)
+        }else {
+        	_cid = data.cid
+            getResult()
+        }
 	}
+}
 
-	xhr.send(JSON.stringify({
-		img_buf: imgBase64,
-		type: 'D',
-		logon: _module.module === 'login' ? 1 : 0,//1代表识别1个物品，0代表2个
-		check: _plugin.GetSig(imgBase64)
-	}))
+//验证码结果错误
+function codeError (){
+	let { username , password } = _damaUser
+
+	sendMsg(['msgCb' , 'code错误反馈：' + _cid , 'codeError'])
+
+	Fetch(_yunma + 'method=report' , {
+		username,
+		password,
+		appid : 1,
+		appkey : '22cc5376925e9387a23cf797cb9ba745',
+		flag : 0,
+		cid : _cid,
+	})
 }
 
 /*---辅助函数---*/
+
+function dataURLtoBlob(dataurl) {
+    var arr = dataurl.split(','), 
+        mime = arr[0].match(/:(.*?);/)[1],
+        bstr = atob(arr[1]),
+        n = bstr.length, 
+        u8arr = new Uint8Array(n)
+
+    while(n--){
+        u8arr[n] = bstr.charCodeAt(n)
+    }
+
+    return new Blob([u8arr], {type:mime})
+}
+
 function ObjStringData (data) {
 	return Object.keys(data).map((key) => encodeURIComponent(key) + '=' + encodeURIComponent(data[key])).join('&')
 }
 
-function Fetch (url , data , cb , resType = 'json'){
-	let count = 1
-	,	other = {
-		credentials: 'include',
-		headers : {
-			'Upgrade-Insecure-Requests' : 1//让loginAysnSuggest请求通过
-		}
-	}
+function Fetch (url , data , cb , headers , resType){
+	let other = { credentials: 'include' }
+	,	count = 1
 
 	if(data) {
 		other.method = 'POST'
-		other.headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=utf-8'
+		other.headers = { 'Content-Type' : 'application/x-www-form-urlencoded;charset=utf-8' }
 
-		if(typeof data === 'object') data = ObjStringData(data)
+		if(headers === 0) {
+			delete other.headers
+		}else {
+			data = ObjStringData(data)
+		}
 
 		other.body = data
 	}else {
-		other.headers['Cache-Control'] = 'no-cache'
+		other.headers = { 'Cache-Control' : 'no-cache' }
 	}
 
 	ajax()
 	function ajax (){
 		fetch(url , other)
-		.then(res => res[resType]())
+		.then(res => res[resType ? 'text' : 'json']())
 		.then(res => {
 			if(res.data && res.data.errMsg) {
 				error(res.data.errMsg)
@@ -362,7 +333,7 @@ function Fetch (url , data , cb , resType = 'json'){
 //向popup.html发送信息
 function sendMsg ([match , value , funcName = '' , isAlwayShow = true]) {
 	if(match === 'msgCb') {
-		++_errorCount
+		funcName !== '获取验证码结果' && ++_errorCount
 
 		!_noShowMsgBox && chrome.notifications[_initMsgBox ? 'update' : 'create']('msgBox' , {
 			type : 'basic',

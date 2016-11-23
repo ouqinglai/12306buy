@@ -1,6 +1,6 @@
 {
     "name" : "12306buy",
-    "version" : "1.1",
+    "version" : "1.0",
     "manifest_version" : 2,
     "description" : "12306buy plugin",
     "icons": {
@@ -13,18 +13,13 @@
     },
     "permissions" : [
         "tabs",
-        "cookies",
-        "*://*.12306.cn/*",
-        "*://*/otn/*",
-        "notifications",
-        "webRequest", 
-        "webRequestBlocking"
+        "http://*/*",
+        "https://*/*",
+        "notifications"
     ],
-    "plugins": [{
-      "path": "plugin/helper.dll"
-    }],
-    "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCpANivE+0xzITS4VXIQFwynZn29tuKnKOz3fc0oFSCbrqmVxgH9wGVoEWMCqju9J085D5GGxzOk5tvWG0eFLq11Feywn+YunXqzcfP1BGtrPKeCD2F8A3pOWQOw1UQF7GRoJhRamHdsx2zqslQ6ftjx9K//Cq4akIZHAErmeRjoQIDAQAB",
     "background": {
-        "page": "background.html"
+        "scripts": [
+            "background.js"
+        ]
     }
 }

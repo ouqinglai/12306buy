@@ -1,5 +1,8 @@
-var SUBMIT = $('#order_submit')
+var LOGIN = $('#loginForm')
+,	ORDER = $('#order')
+,	YUNDAMA = $('#damaForm')
 ,	url1 = 'https://kyfw.12306.cn/otn/'
+,	url2 = 'http://www.yundama.com/'
 ,	stationName
 ,	hook = [e => e.preventDefault() , (match , value) => {
 	chrome.runtime.sendMessage({
@@ -12,25 +15,56 @@ var SUBMIT = $('#order_submit')
 $('[name="to_date"]').value = new Date().toLocaleDateString().replace(/\//g , '-')
 $('[name="time"]').value = new Date().toTimeString().match(/\d+:\d+/)[0]
 
-//check 12306 login
-Fetch('index/initMy12306')
-.then(res => {
-	whichFormShow(res.url === url1 + 'index/initMy12306' ? 3 : 2)
-})
+$('#code_img').onclick = function (){
+	this.src = this.src + '?r=' + +new Date
+}
+$('.change-dama').onclick = () => whichFormShow(1)
+
+if(localStorage['dama']) {
+	fetch(url1 + 'index/initMy12306' , { credentials: 'include' })
+	.then(res => {
+		whichFormShow(res.url === url1 + 'index/initMy12306' ? 3 : 2)
+	})
+}else {
+	whichFormShow(1)
+}
 
 //当错误提示框后台运行时，点击图片时让它再次显示
 chrome.runtime.sendMessage({ match : 'iconClick' })
 
 //获取车站对应编码
-Fetch('resources/js/framework/station_name.js?station_version=1.8971' , res => stationName = res , 'text')
+fetch(url1 + 'resources/js/framework/station_name.js?station_version=1.8971' , { credentials: 'include' })
+.then(res => res.text())
+.then(res => stationName = res)
 
 /* eventBind */
-$('#loginForm').onsubmit = function (e) {
+YUNDAMA.onsubmit = function (e) {
+	hook[0](e)
+	
+	let obj = formData(this)
+
+	fetch(url2 + 'index/login?' + objStringData(obj) , { credentials: 'include' })
+	.then(res => res.json())
+	.then(res => {
+		if(res.ret === 0) {
+			whichFormShow(2)
+			hook[1]('damaLogin' , obj)
+			localStorage['dama'] = true
+		}
+		else {
+			new Notification(res.msg , { icon : 'logo.png' })
+			$('#code_img').click()
+			$('[name="vcode"').value = ''
+		}
+	})
+}
+
+LOGIN.onsubmit = function (e) {
 	hook[0](e)
 	hook[1]('userLogin' , formData(this))
 }
 
-$('#order').onsubmit = function (e) {
+ORDER.onsubmit = function (e) {
 	hook[0](e)
 
 	let orderInfo = formData(this)
@@ -39,7 +73,7 @@ $('#order').onsubmit = function (e) {
 	orderInfo.from = findStationCode(from)
 	orderInfo.to = findStationCode(to)
 
-	if(orderInfo.mode === 'buy') SUBMIT.setAttribute('disabled' , '')
+	if(orderInfo.mode === 'buy') ORDER.setAttribute('disabled' , '')
 
 	hook[1]('orderInfo' , orderInfo)
 }
@@ -48,42 +82,11 @@ chrome.runtime.onMessage.addListener(({ match , value }) => {
 	if(match === 'loginCb') {
 		whichFormShow(3)
 	}else if (match === 'errorCb') {
-		SUBMIT.removeAttribute('disabled')
+		ORDER.removeAttribute('disabled')
 	}
 })
 
 /* helper */
-
-//获取常用联系人（乘客）信息
-function getPassenger (){
-	Fetch('confirmPassenger/getPassengerDTOs' , ({ data : { normal_passengers } }) => {
-		let passenger = normal_passengers[0]
-
-		if(passenger) {
-			Array('passenger_name' , 'passenger_id_no' , 'mobile_no').forEach(id => $('#' + id).value = passenger[id] || '(无)')
-		}else {
-			SUBMIT.setAttribute('disabled' , '')
-			new Notification('请先设置常用联系人！' , {
-				icon : './logo.png'
-			})
-		}
-	})
-}
-
-function Fetch (api , cb , type = 'json') {
-	let promise = fetch(url1 + api , {
-		credentials: 'include',
-		headers : { 'Cache-Control' : 'no-cache' }
-	})
-
-	if(cb) {
-		promise
-		.then(res => res[type]())
-		.then(res => cb(res))
-	}else
-		return promise
-}
-
 function findStationCode (name){
 	return [name , stationName.match(new RegExp('\\|' + name + '\\|[a-zA-z]+\\|'))[0].split('|')[2]]
 }
@@ -105,7 +108,9 @@ function formData (form){
 }
 
 function whichFormShow (index) {
-	if(index === 3) getPassenger()
-
 	document.body.setAttribute('class' , 'form' + index)
+}
+
+function objStringData (data) {
+	return Object.keys(data).map((key) => encodeURIComponent(key) + '=' + encodeURIComponent(data[key])).join('&')
 }

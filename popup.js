@@ -12,6 +12,14 @@ var SUBMIT = $('#order_submit')
 $('[name="to_date"]').value = new Date().toLocaleDateString().replace(/\//g , '-')
 $('[name="time"]').value = new Date().toTimeString().match(/\d+:\d+/)[0]
 
+//读取12306账户信息
+fetch('12306.json')
+.then(res => res.json())
+.then(user => {
+	$('[name="user"]').value = user.username
+	$('[name="pwd"]').value = user.password
+})
+
 //check 12306 login
 Fetch('index/initMy12306')
 .then(res => {

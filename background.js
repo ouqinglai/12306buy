@@ -36,13 +36,16 @@ window.onload = () => _plugin = document.querySelector('#pluginId')
 chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
     _tabId = id
 
+	window.clearTimeout(_clearTimeout)
+	chrome.notifications.clear('needToBuy')
+	chrome.notifications.clear('msgBox')
+
     if(match === 'userLogin'){
     	//放在最后执行，因为上面的login = login.bind(null , value)要判断是否已绑定value
     	if(!_isLoginFuncBind) {
     		_isLoginFuncBind = true
     		login = login.bind(null , value)
     	}
-		window.clearTimeout(_clearTimeout)
     	_module = { module : 'login' , rand : 'sjrand' }
 		start()
     }else if (match === 'orderInfo') {
@@ -67,10 +70,6 @@ chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
 		_setTime = value.loop || 10//默认10s 询票一次
 		_noShowMsgBox = false
 		
-		window.clearTimeout(_clearTimeout)
-		chrome.notifications.clear('needToBuy')
-		chrome.notifications.clear('msgBox')
-
 		queryTicket()
     }else if (match === 'iconClick') {
     	_noShowMsgBox = false
@@ -114,7 +113,6 @@ chrome.webRequest.onBeforeSendHeaders.addListener(({ url , requestHeaders }) => 
 			'station_name'
 		).some(apiName => {
 			if(RegExp(apiName).test(url)) {
-				console.log(url)
 				return requestHeaders.push({
 					name: 'Origin',
 					value: 'https://kyfw.12306.cn'
@@ -268,7 +266,7 @@ function dataUrl (cb){
 
 //获取验证码结果
 function sendImg2Plugin (imgBase64 , isReLogin){
-	// Fetch('/img_vcode' , JSON.stringify({
+	// Fetch('http://check.huochepiao.360.cn/img_vcode' , JSON.stringify({
 	// 	img_buf: imgBase64,
 	// 	type: 'D',
 	// 	logon: _module.module === 'login' ? 1 : 0,//1代表识别1个物品，0代表2个
@@ -282,9 +280,11 @@ function sendImg2Plugin (imgBase64 , isReLogin){
 
 	var xhr = new XMLHttpRequest
  
-	xhr.open('POST' , 'http://check.huochepiao.360.cn/img_vcode?' + +new Date , true)
+	xhr.open('POST' , 'http://check.huochepiao.360.cn/img_vcode' , true)
 
-	// xhr.timeout = 3000
+	xhr.timeout = 3000
+
+	xhr.withCredentials = true//允许携带cookie
 
 	xhr.setRequestHeader('Content-Type' , 'application/x-www-form-urlencoded')
 
@@ -297,7 +297,7 @@ function sendImg2Plugin (imgBase64 , isReLogin){
 
 				res ? checkCode(res , isReLogin) : start(isReLogin)
 	    	}else {
-	    		console.log(xhr)
+	    		sendImg2Plugin(imgBase64 , isReLogin)
 	    	}
 	    }
 	}
@@ -316,8 +316,7 @@ function ObjStringData (data) {
 }
 
 function Fetch (url , data , cb , resType = 'json'){
-	let count = 1
-	,	other = {
+	let other = {
 		credentials: 'include',
 		headers : {
 			'Upgrade-Insecure-Requests' : 1//让loginAysnSuggest请求通过

@@ -1,5 +1,6 @@
 var SUBMIT = $('#order_submit')
 ,	url1 = 'https://kyfw.12306.cn/otn/'
+,	user = JSON.parse(localStorage.USER || '{ "user" : "" , "pwd" : "" }')//user和pwd字段固定
 ,	stationName
 ,	hook = [e => e.preventDefault() , (match , value) => {
 	chrome.runtime.sendMessage({
@@ -13,12 +14,8 @@ $('[name="to_date"]').value = new Date().toLocaleDateString().replace(/\//g , '-
 $('[name="time"]').value = new Date().toTimeString().match(/\d+:\d+/)[0]
 
 //读取12306账户信息
-fetch('12306.json')
-.then(res => res.json())
-.then(user => {
-	$('[name="user"]').value = user.username
-	$('[name="pwd"]').value = user.password
-})
+$('[name="user"]').value = user.user
+$('[name="pwd"]').value = user.pwd
 
 //check 12306 login
 Fetch('index/initMy12306')
@@ -35,6 +32,7 @@ Fetch('resources/js/framework/station_name.js?station_version=1.8971' , res => s
 /* eventBind */
 $('#loginForm').onsubmit = function (e) {
 	hook[0](e)
+
 	hook[1]('userLogin' , formData(this))
 }
 
@@ -46,6 +44,7 @@ $('#order').onsubmit = function (e) {
 
 	orderInfo.from = findStationCode(from)
 	orderInfo.to = findStationCode(to)
+	orderInfo.user = user
 
 	if(orderInfo.mode === 'buy') SUBMIT.setAttribute('disabled' , '')
 
@@ -54,9 +53,12 @@ $('#order').onsubmit = function (e) {
 
 chrome.runtime.onMessage.addListener(({ match , value }) => {
 	if(match === 'loginCb') {
+		localStorage.USER = JSON.stringify(value)
 		whichFormShow(3)
 	}else if (match === 'errorCb') {
 		SUBMIT.removeAttribute('disabled')
+	}else if (match === 'loading') {
+		$$forEach('button[type="submit"]' , dom => dom.classList.toggle('loading'))
 	}
 })
 
@@ -81,7 +83,7 @@ function getPassenger (){
 function Fetch (api , cb , type = 'json') {
 	let promise = fetch(url1 + api , {
 		credentials: 'include',
-		headers : { 'Cache-Control' : 'no-cache' }
+		// headers : { 'Cache-Control' : 'no-cache' }
 	})
 
 	if(cb) {
@@ -100,10 +102,14 @@ function $ (selector){
 	return document.querySelector(selector)
 }
 
+function $$forEach (selector , cb){
+	[].forEach.call(document.querySelectorAll(selector) , cb)
+}
+
 function formData (form){
 	let obj = {}
 
-	;[].slice.call(form.querySelectorAll('[name]')).forEach(dom => {
+	$$forEach('[name]' , dom => {
 		if(dom.type === 'radio' || dom.type === 'checkbox') {
 			dom.checked && (obj[dom.name] = dom.value)
 		}else if(dom.name) obj[dom.name] = dom.value

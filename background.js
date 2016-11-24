@@ -14,12 +14,14 @@ var _tabId//返回给popup.html信息
 ,	_noShowMsgBox = false//bool，让mosgBox消息框后台运行
 ,	_errorCount = 0//number,收集msgBox消息框错误提示次数
 ,	_plugin//object's method imgBase64 => check's Code
-,	_isLoginFuncBind = false//login = login.bind(null , value)只执行一次
+,	_buyIfHasTicket = false//后台运行(并自动下单)
+,	_user//object 12306用户登录信息
+,	_isClickCloseBtnWhenQuery = false//判断是否在询票中，是的话，当点击close按钮时提示后台运行中，有票时询问
 
 /*买票变量*/
 var _randCode = ''
 ,	_secretStr//ticket string
-,	_toTime//string出发日期
+,	_toDate//string出发日期
 ,	_type//string 'M'/*一等座*/ , 'O'/*二等座*/ , 9/*商务座*/
 ,	_from//array
 ,	_to//array
@@ -29,35 +31,35 @@ var _randCode = ''
 ,	_passengerStr//string
 ,	_time//array，['16:00'班次时间 , '[-1 , 1]'选取上下1小时内的最快班次]
 ,	_carId//火车型号G123
-,	_start_time = ''//string，出发时间
+,	_start_time = _old_start_time = ''//string，班次出发时间
 
 window.onload = () => _plugin = document.querySelector('#pluginId')
 
 chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
     _tabId = id
 
-	window.clearTimeout(_clearTimeout)
-	chrome.notifications.clear('needToBuy')
-	chrome.notifications.clear('msgBox')
+    if(match === 'userLogin' || match === 'orderInfo') {
+		window.clearTimeout(_clearTimeout)
+		chrome.notifications.clear('needToBuy')
+		chrome.notifications.clear('msgBox')
+    }
 
     if(match === 'userLogin'){
-    	//放在最后执行，因为上面的login = login.bind(null , value)要判断是否已绑定value
-    	if(!_isLoginFuncBind) {
-    		_isLoginFuncBind = true
-    		login = login.bind(null , value)
-    	}
+    	_user = value
     	_module = { module : 'login' , rand : 'sjrand' }
+
 		start()
     }else if (match === 'orderInfo') {
-		_randCode = ''
+		_randCode = _old_start_time = ''
 		_module = {
 			module : 'passenger',
 			rand : 'randp'
 		}
 
+		_user = value.user
 		_from = value.from
 		_to = value.to
-		_toTime = value.to_date
+		_toDate = value.to_date
 		_time = [value.time , /*value.time_range*/]
 		_type = value.type
 
@@ -68,7 +70,7 @@ chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
 		_isBuyMode = value.mode === 'buy'
 		_can_noSeat = value.can_noSeat
 		_setTime = value.loop || 10//默认10s 询票一次
-		_noShowMsgBox = false
+		_noShowMsgBox = _buyIfHasTicket = false
 		
 		queryTicket()
     }else if (match === 'iconClick') {
@@ -80,13 +82,22 @@ chrome.notifications.onButtonClicked.addListener((id , btnIndex) => {
 	chrome.notifications.clear(id)
 	if(id === 'needToBuy') start()
 	else if (id === 'msgBox') {
-		if(btnIndex === 0) _noShowMsgBox = true
+		if(btnIndex === 0) _noShowMsgBox = _buyIfHasTicket = true
 		else window.clearTimeout(_clearTimeout)
 	}
 })
 
 chrome.notifications.onClosed.addListener((id , byUser) => {
-	if(id === 'msgBox') _initMsgBox = false
+	if(id === 'msgBox') {
+		_initMsgBox = false
+
+		if(byUser && _isClickCloseBtnWhenQuery) {
+			sendMsg(['msgCb' , '后台运行中，有票时询问' , '(点击插件图标重新显示消息框)' , false])
+
+			_noShowMsgBox = true//要放在sendMsg函数之后
+			_buyIfHasTicket = false
+		}
+	}
 })
 
 //处理Provisional headers are shown请求
@@ -129,9 +140,11 @@ chrome.webRequest.onBeforeSendHeaders.addListener(({ url , requestHeaders }) => 
 	['blocking' , 'requestHeaders']
 )
 
-//1、登录验证
+//1、请求验证码
 function start (isReLogin/*bool用于重新登录*/){
 	let cb = () => dataUrl(val => sendImg2Plugin(val , isReLogin))
+
+	sendMsg(['msgCb' , '等待返回验证码结果...'])
 
 	//删除BIGipServerotn cookie，则图片验证码只需识别一个物品，此时用于登录，
 	//提交订单时的图片验证码一定是识别两个物品
@@ -146,13 +159,18 @@ function start (isReLogin/*bool用于重新登录*/){
 }
 
 //2、验证成功后，登录
-function login (userLogin , cb){
+function login (cb){
 	Fetch(_ctx + 'login/loginAysnSuggest' , {
-		'loginUserDTO.user_name' : userLogin.user,
-		'userDTO.password' : userLogin.pwd,
+		'loginUserDTO.user_name' : _user.user,
+		'userDTO.password' : _user.pwd,
 		'randCode' : _randCode,
 	} , () => {
-		sendMsg(['loginCb'])
+		_module = {
+			module : 'passenger',
+			rand : 'randp'
+		}
+
+		sendMsg(['loginCb' , _user])
 
 		sendMsg(['msgCb' , '登录成功！' , 'login' , false])
 
@@ -164,21 +182,36 @@ function login (userLogin , cb){
 function queryTicket (){
 	//GET
 	Fetch(_ctx + 'leftTicket/queryX?' + ObjStringData({//GET
-		'leftTicketDTO.train_date':_toTime,
+		'leftTicketDTO.train_date':_toDate,
 		'leftTicketDTO.from_station':_from[1],
 		'leftTicketDTO.to_station':_to[1],
 		'purpose_codes':'ADULT',
 	}) , null , res => {
 		if(_secretStr = selectTime(res.data)) orderTicket()
-		else !_isBuyMode && (_clearTimeout = setTimeout(queryTicket , 1000 * _setTime/*多少秒查一次*/))
+		else if(!_isBuyMode) {
+			//用于判断_start_time是否发生了变化，说明之前班次已停止售票
+			if(_old_start_time !== _start_time) {
+				if(_old_start_time) {
+					_noShowMsgBox = false
+
+					sendMsg(['msgCb' , _old_start_time + '班次已停止售票，自动调整下一班' + _start_time , 'queryTicket'])
+				}
+
+				_old_start_time = _start_time//放在if判断之后
+			}
+
+			_clearTimeout = setTimeout(queryTicket , 1000 * _setTime/*多少秒查一次*/)
+		}
 	})
 }
 
 //4、跳转到提交订单页面
 function orderTicket (){
+	// chrome.notifications.clear('msgBox')
+
 	Fetch(_ctx + 'leftTicket/submitOrderRequest' , {
 		secretStr:_secretStr,
-		train_date : _toTime,
+		train_date : _toDate,
 		back_train_date:_baTime,
 		tour_flag:'dc',
 		purpose_codes:'ADULT',
@@ -193,12 +226,12 @@ function getTicketHtml (){
 		_ticketInfo = JSON.parse(text.match(/var ticketInfoForPassengerForm.+\};/)[0].replace(/(var ticketInfoForPassengerForm=|\;)/g , '').replace(/\'/g , '"'))
 		_token = text.match(/var globalRepeatSubmitToken.+\;/)[0].replace(/(.+\s|\'|\;)/g , '')
 
-		let isTimeout = ((new Date(_toTime + ' ' + _start_time).getTime() - new Date(_toTime + ' ' + _time[0]).getTime()) / 1000 / 60) > 30/*大于30分钟时要询问用户是否还买票*/
+		let isTimeout = ((new Date(_toDate + ' ' + _start_time).getTime() - new Date(_toDate + ' ' + _time[0]).getTime()) / 1000 / 60) > 30/*大于30分钟时要询问用户是否还买票*/
 		_isBuyMode && !isTimeout ? start() : createNotice()
 	} , 'text')
 }
 
-//6、先询问一下
+//6、先询问一下12306，必须
 function ckeckOrderInfo (){
 	Fetch(_ctx + 'confirmPassenger/checkOrderInfo' , {
 		cancel_flag:2,//未知
@@ -278,6 +311,8 @@ function sendImg2Plugin (imgBase64 , isReLogin){
 
 	/*XMLHttpRequest Origin 有效*/
 
+	sendMsg(['loading'])
+
 	var xhr = new XMLHttpRequest
  
 	xhr.open('POST' , 'http://check.huochepiao.360.cn/img_vcode' , true)
@@ -289,6 +324,7 @@ function sendImg2Plugin (imgBase64 , isReLogin){
 	xhr.setRequestHeader('Content-Type' , 'application/x-www-form-urlencoded')
 
 	xhr.onreadystatechange = () => {
+		sendMsg(['loading'])
 	    if (xhr.readyState == 4) {
 	    	if(xhr.status == 200) {
 	            let res = JSON.parse(xhr.responseText).res
@@ -297,7 +333,7 @@ function sendImg2Plugin (imgBase64 , isReLogin){
 
 				res ? checkCode(res , isReLogin) : start(isReLogin)
 	    	}else {
-	    		sendImg2Plugin(imgBase64 , isReLogin)
+	    		start(isReLogin)
 	    	}
 	    }
 	}
@@ -333,12 +369,14 @@ function Fetch (url , data , cb , resType = 'json'){
 	}else {
 		other.headers['Cache-Control'] = 'no-cache'
 	}
-
+	
+	sendMsg(['loading'])
 	ajax()
 	function ajax (){
 		fetch(url , other)
 		.then(res => res[resType]())
 		.then(res => {
+			sendMsg(['loading'])
 			if(res.data && res.data.errMsg) {
 				error(res.data.errMsg)
 			}else if(res.messages && res.messages.length !== 0) {
@@ -361,16 +399,18 @@ function Fetch (url , data , cb , resType = 'json'){
 //向popup.html发送信息
 function sendMsg ([match , value , funcName = '' , isAlwayShow = true]) {
 	if(match === 'msgCb') {
+		_isClickCloseBtnWhenQuery = !_isBuyMode && funcName === 'selectTime'
+
 		++_errorCount
 
 		!_noShowMsgBox && chrome.notifications[_initMsgBox ? 'update' : 'create']('msgBox' , {
 			type : 'basic',
 			title : '提示' + _errorCount,
 			message : value,
-			contextMessage : funcName,
+			contextMessage : funcName + '  ' + new Date().getHours() + ':' + new Date().getMinutes(),
 			iconUrl : 'logo.png',
 			requireInteraction : isAlwayShow,//一直显示
-			buttons : !_isBuyMode && funcName === 'selectTime' ? [{ title : '后台运行' } , { title : '停止' }] : [],
+			buttons : _isClickCloseBtnWhenQuery ? [{ title : '后台运行(并自动下单)' } , { title : '停止' }] : [],
 		} , () => _initMsgBox = true)
 	}else {
 		chrome.runtime.sendMessage(_tabId , {
@@ -382,21 +422,33 @@ function sendMsg ([match , value , funcName = '' , isAlwayShow = true]) {
 
 //询票成功，是否下单
 function createNotice (){
-	let _seat
-	_ticketInfo.leftDetails.forEach((seat , index) => {
-		if(seat.match(_typeArray[_type])) _seat = _ticketInfo.leftDetails[index]
+	let seat
+	,	title = _from[0] + ' 到 ' + _to[0] + `  (${ _toDate })   `
+	,	buttons = [{ title : '立即购买' }]
+
+	_ticketInfo.leftDetails.forEach((_seat , index) => {
+		if(_seat.match(_typeArray[_type])) seat = _ticketInfo.leftDetails[index]
 	})
 
 	_noShowMsgBox = false
 
+	if(_buyIfHasTicket) {
+		_buyIfHasTicket = false
+		
+		title += '下单中...'
+		buttons = []
+
+		start()
+	}
+
 	chrome.notifications.create('needToBuy' , {
 		type : 'basic',
-		title : _from[0] + ' 到 ' + _to[0] + `(${ _toTime })`,//广州南 到 北京西(日期)
-		message : _is_buy_noSeat ? '(无座票!!!)' : _seat,//硬卧(426.00元)15张票
+		title,//广州南 到 北京西(日期)
+		message : _is_buy_noSeat ? '(无座票!!!)' : seat,//硬卧(426.00元)15张票
 		iconUrl : 'logo.png',
 		contextMessage : _carId + '   历时' + _lishi + '   出发时间' + _start_time,//火车型号G123  历时  出发时间
 		requireInteraction : true,//一直显示
-		buttons : [{ title : '立即购买' }],
+		buttons,
 	})
 }
 

@@ -42,11 +42,22 @@
 		.no-required:before {
 			content: '';
 		}
-		input[type="submit"] {
+		button[type="submit"] {
+			position: relative;
 		    display: block;
 		    width: 100px;
 		    margin: 20px auto;
 		    height: 30px;
+			cursor: pointer;
+		}
+		button[type="submit"].loading:after {
+			content:'';
+			position: absolute;
+			right: 0;
+			padding: 0 17px 17px 0;
+			margin-left: 10px;
+			background: url(loading.gif) no-repeat;
+			background-size: contain;
 		}
 		input[type="radio"] , input[type="checkbox"] {
 		    width: 15px;
@@ -90,7 +101,7 @@
 		<h3>12306登录</h3>
 		<div>用户名：<input type="text" name="user" required></div>
 		<div>密码：<input type="password" name="pwd" required></div>
-		<input type="submit" value="登录">
+		<button type="submit">登录</button>
 	</form>
 
 	<form id="order">
@@ -120,10 +131,10 @@
 		<div>坐车时间：<input type="time" name="time" placeholder="16:00" required></div>
 		<!-- <div class="no-required">时间区间：<input type="text" name="time_range" placeholder="[-1,1]表示允许15:00~17:00之间最快班次，-0.5为15:30"></div> -->
 		<h3>模式</h3>
-		<div class="no-required">下单：<input type="radio" name="mode" value="buy" checked="checked"></div>
+		<div class="no-required">下单：<input type="radio" name="mode" value="buy"></div>
 		<div class="no-required">
 			询票：
-			<input type="radio" name="mode" value="inquiry">
+			<input type="radio" name="mode" value="inquiry" checked="checked">
 			<input type="number" max="60" min="5" step="1" name="loop" placeholder="默认10秒循环">
 		</div>
 		<div class="no-required">可选无座：<input type="checkbox" name="can_noSeat"></div>
@@ -134,7 +145,7 @@
 			2、询票模式：每隔多少秒在后台查询有无票，当有票时桌面通知<br>
 			3、可选无座模式：首选二等座，次选无座
 		</span>
-		<input id="order_submit" type="submit" value="提交">
+		<button id="order_submit" type="submit">提交</button>
 	</form>
 </body>
 </html>

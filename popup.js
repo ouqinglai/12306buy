@@ -21,12 +21,12 @@ chrome.tabs.query({ active : true } , ([{ id , url }]) => {
 //获取优惠券
 function getCoupons (itemID){
 	Fetch(`http://s.etao.com/detail/${ itemID }.html` , null , text => {
-		text.replace(/sellerId=(\d+)/ , ($1 , $2) => {
-			makeFeeBtn(itemID , $2)
+		text.replace(/(seller|userNum)Id=(\d+)/ , ($1 , $2 , $3) => {
+			makeFeeBtn(itemID , $3)
 
 			Promise.all([
-				Fetch(`http://zhushou3.taokezhushou.com/api/v1/coupons_base/${ $2 }` , { item_id : itemID }),
-				Fetch('https://cart.taobao.com/json/GetPriceVolume.do' , { sellerId : $2 }),
+				Fetch(`http://zhushou3.taokezhushou.com/api/v1/coupons_base/${ $3 }` , { item_id : itemID }),
+				Fetch('https://cart.taobao.com/json/GetPriceVolume.do' , { sellerId : $3 }),
 			])
 			.then(([{ data } , { priceVolumes }]) => {
 				let coupons = []
@@ -34,7 +34,7 @@ function getCoupons (itemID){
 				,	fetchList = []
 
 				data.concat(priceVolumes).forEach(({ activity_id , id }) => {
-					let couponURL = `http://shop.m.taobao.com/shop/coupon.htm?seller_id=${ $2 }&activity_id=${ activity_id || id }`
+					let couponURL = `http://shop.m.taobao.com/shop/coupon.htm?seller_id=${ $3 }&activity_id=${ activity_id || id }`
 
 					if(idArray.indexOf(couponURL) === -1) {
 						idArray.push(couponURL)

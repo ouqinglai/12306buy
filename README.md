@@ -1,24 +1,18 @@
-# 12306buy
-12306buy chrome extension plugin 浏览器插件
-一键下单，自动通过验证码，带循环查票功能。后台运行，桌面通知
-* **browser :** 尽量使用最新360极速浏览器.
-* **passenger :** 请先到[12306](https://kyfw.12306.cn/otn/passengers/addInit)设置一个常用联系人.
+# taobaobuy
+taobaobuy 淘客助手 chrome extension plugin 浏览器插件
+一键获取佣金链接，并重定向。领取优惠券，包括隐藏券
+* **browser :** 尽量使用最新chrome浏览器.
 
 ## step
 
-### login 12306
-![login 12306](https://github.com/ouqinglai/12306buy/blob/master/screenshot/login.png)
+### login 请先登录阿里妈妈
 
-### write ticket information
-![main screen](https://github.com/ouqinglai/12306buy/blob/master/screenshot/main.png)
+### set [设置广告位推广](http://pub.alimama.com/myunion.htm?spm=0.0.0.0.NnFGk2#!/manage/site/site?spm=0.0.0.0.NnFGk2&tab=4&toPage=1)，以后跳过此步骤
+![when has ticket](https://github.com/ouqinglai/12306buy/blob/taobaobuy/screenshot/register.png)
 
-## chrome.notifications(桌面通知)
+### open 打开一个tmall或taobao商品详情
 
-### when has ticket
-![when has ticket](https://github.com/ouqinglai/12306buy/blob/master/screenshot/hasTicket.png)
+### start 点击右上角插件图标，显示操作界面
+![when has ticket](https://github.com/ouqinglai/12306buy/blob/taobaobuy/screenshot/main.png)
 
-### tip box
-![tip box](https://github.com/ouqinglai/12306buy/blob/master/screenshot/tip.png)
-
-### success!!
-![addOrder success](https://github.com/ouqinglai/12306buy/blob/master/screenshot/success.png)
+### 点击按钮，页面重定向带有mm号的链接。正常下单或加入购物车

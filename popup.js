@@ -1,125 +1,194 @@
-var SUBMIT = $('#order_submit')
-,	url1 = 'https://kyfw.12306.cn/otn/'
-,	user = JSON.parse(localStorage.USER || '{ "user" : "" , "pwd" : "" }')//user和pwd字段固定
-,	stationName
-,	hook = [e => e.preventDefault() , (match , value) => {
-	chrome.runtime.sendMessage({
-        match,
-        value,
-    })
-}]
+chrome.tabs.query({ active : true } , ([{ id , url }]) => {
+	if(/(tmall|taobao).com\/(item|home).htm/.test(url)) {
+        let itemID
+        ,   cb = $1 => itemID = $1
 
-/* init */
-$('[name="to_date"]').value = new Date().toLocaleDateString().replace(/\//g , '-')
-$('[name="time"]').value = new Date().toTimeString().match(/\d+:\d+/)[0]
+        url.replace(/[^pv]id=\d+/ , cb)
 
-//读取12306账户信息
-$('[name="user"]').value = user.user
-$('[name="pwd"]').value = user.pwd
+        url.replace(/item_id=\d+/ , cb)
 
-//check 12306 login
-Fetch('index/initMy12306')
-.then(res => {
-	whichFormShow(res.url === url1 + 'index/initMy12306' ? 3 : 2)
+        itemID.replace(/\d+/ , cb)
+
+        getShortURL = getShortURL.bind(null , id)
+
+        getCoupons(itemID)
+    }else {
+        sendMsg('此页面非天猫或淘宝的商品详情页！')
+    }
+
 })
 
-//当错误提示框后台运行时，点击图片时让它再次显示
-chrome.runtime.sendMessage({ match : 'iconClick' })
+//获取优惠券
+function getCoupons (itemID){
+	Fetch(`http://s.etao.com/detail/${ itemID }.html` , null , text => {
+		text.replace(/sellerId=(\d+)/ , ($1 , $2) => {
+			makeFeeBtn(itemID , $2)
 
-//获取车站对应编码
-Fetch('resources/js/framework/station_name.js?station_version=1.8971' , res => stationName = res , 'text')
+			Promise.all([
+				Fetch(`http://zhushou3.taokezhushou.com/api/v1/coupons_base/${ $2 }` , { item_id : itemID }),
+				Fetch('https://cart.taobao.com/json/GetPriceVolume.do' , { sellerId : $2 }),
+			])
+			.then(([{ data } , { priceVolumes }]) => {
+				let coupons = []
+				,	idArray = []
+				,	fetchList = []
 
-/* eventBind */
-$('#loginForm').onsubmit = function (e) {
-	hook[0](e)
+				data.concat(priceVolumes).forEach(({ activity_id , id }) => {
+					let couponURL = `http://shop.m.taobao.com/shop/coupon.htm?seller_id=${ $2 }&activity_id=${ activity_id || id }`
 
-	hook[1]('userLogin' , formData(this))
-}
+					if(idArray.indexOf(couponURL) === -1) {
+						idArray.push(couponURL)
+						fetchList.push(Fetch(couponURL , 0 , 0 , 'text'))
+					}
+				})	
 
-$('#order').onsubmit = function (e) {
-	hook[0](e)
+				Promise.all(fetchList)
+				.then(([...textList]) => {
+					textList.forEach((text , index) => {
+						coupons.push({
+							array : text.match(/<dl>(\s|\S)+<\/dl>/)[0].match(/((\d+元优惠券)|(满(\d|\.)+)|(限领\d*)|(有效期.+\d))/g),
+							url : idArray[index]
+						})
+					})
 
-	let orderInfo = formData(this)
-	,	{ from , to } = orderInfo
-
-	orderInfo.from = findStationCode(from)
-	orderInfo.to = findStationCode(to)
-	orderInfo.user = user
-
-	if(orderInfo.mode === 'buy') SUBMIT.setAttribute('disabled' , '')
-
-	hook[1]('orderInfo' , orderInfo)
-}
-
-chrome.runtime.onMessage.addListener(({ match , value }) => {
-	if(match === 'loginCb') {
-		localStorage.USER = JSON.stringify(value)
-		whichFormShow(3)
-	}else if (match === 'errorCb') {
-		SUBMIT.removeAttribute('disabled')
-	}else if (match === 'loading') {
-		$$forEach('button[type="submit"]' , dom => dom.classList.toggle('loading'))
-	}
-})
-
-/* helper */
-
-//获取常用联系人（乘客）信息
-function getPassenger (){
-	Fetch('confirmPassenger/getPassengerDTOs' , ({ data : { normal_passengers } }) => {
-		let passenger = normal_passengers[0]
-
-		if(passenger) {
-			Array('passenger_name' , 'passenger_id_no' , 'mobile_no').forEach(id => $('#' + id).value = passenger[id] || '(无)')
-		}else {
-			SUBMIT.setAttribute('disabled' , '')
-			new Notification('请先设置常用联系人！' , {
-				icon : './logo.png'
+					makeBtn(coupons)
+				})		
 			})
+		})
+	} , 'text')
+}
+
+//生成button按钮
+function makeBtn (coupons){
+	coupons.forEach(({ array , url } , index) => {
+		if(index === coupons.length - 1) newBtnEle.status = 'end'
+
+		newBtnEle(
+			`${ array[1] }减${ array[0].match(/\d+/)[0] }(${ array[2] }张)<br>${ array[3] }`,
+			() => chrome.tabs.create({ url })
+		)
+	})
+}
+//获取通用佣金、定向佣金、鹊桥佣金，并生成按钮
+function makeFeeBtn (itemID , sellerID){
+	Promise.all([
+		Fetch(['shopdetail/campaigns'] , { oriMemberId : sellerID }),
+		Fetch(['items/search'] , { q : 'https://item.taobao.com/item.htm?id=' + itemID }),
+		Fetch('http://zhushou.taokezhushou.com/api/v1/queqiaos/' + itemID)
+	])
+	.then(([{ data : { campaignList } } , { data : { pageList } } , { data : queqiaos }]) => {
+		let { tkRate , auctionId , zkPrice , tkSpecialCampaignIdRateMap } = pageList[0]
+		,	IDArray = ['auctionid' , auctionId]
+
+		campaignList.forEach(({ properties , campaignId , shopKeeperId }) => {
+			if(properties === 1 && campaignId !== 0)
+				newBtnEle(`定向${ calc(tkSpecialCampaignIdRateMap[campaignId]) }` , () => getDingXiangURL({
+					campId : campaignId,
+					keeperid : shopKeeperId,
+					sellerID,
+				}))
+		})
+
+		queqiaos.forEach(({ final_rate , event_id }) => {
+			newBtnEle(`鹊桥${ calc(final_rate) }` , () => getShortURL(IDArray.concat({
+				scenes : 3,
+				channel : 'tk_qqhd',
+			})))
+		})
+
+		newBtnEle.status = 'before'
+		newBtnEle(`通用${ calc(tkRate) }` , () => getShortURL(IDArray))
+
+		function calc (rate){
+			return `(${ zkPrice } * ${ rate }% = ${ zkPrice * rate / 100 })`
 		}
 	})
 }
 
-function Fetch (api , cb , type = 'json') {
-	let promise = fetch(url1 + api , {
-		credentials: 'include',
-		// headers : { 'Cache-Control' : 'no-cache' }
+//定向佣金
+function getDingXiangURL ({ campId , keeperid , sellerID }){
+	Fetch(['pubauc/applyForCommonCampaign' , 'POST'] , {
+		_tb_token_ : '7kYCHxQ2Y9q',//required
+		applyreason : '手动点赞~  ' + new Date().toLocaleTimeString(),
+		keeperid,
+		campId,
+	} , () => getShortURL(['orimemberid' , sellerID]))
+}
+
+//获取短链接，公用方法
+function getShortURL (tabID , [IDName , ID , otherObj]){
+	getSomeID(tabID , (IDObj , cb) => {
+		if(otherObj) Object.assign(IDObj , otherObj)
+
+        Fetch([`common/code/${ IDName === 'auctionid' ? 'getAuctionCode' : 'getShopCode' }`] , Object.assign({
+            [IDName] : ID,
+        } , IDObj) , cb)
 	})
-
-	if(cb) {
-		promise
-		.then(res => res[type]())
-		.then(res => cb(res))
-	}else
-		return promise
 }
 
-function findStationCode (name){
-	return [name , stationName.match(new RegExp('\\|' + name + '\\|[a-zA-z]+\\|'))[0].split('|')[2]]
-}
+//获取广告位信息
+function getSomeID (tabID , cb){
+	Fetch(['common/adzone/newSelfAdzone2'] , { tag : '29' } , ({ data : { otherAdzones , otherList } }) => {
+		otherAdzones = otherAdzones[0]
+        otherList = otherList[0].memberid
 
-function $ (selector){
-	return document.querySelector(selector)
-}
-
-function $$forEach (selector , cb){
-	[].forEach.call(document.querySelectorAll(selector) , cb)
-}
-
-function formData (form){
-	let obj = {}
-
-	$$forEach('[name]' , dom => {
-		if(dom.type === 'radio' || dom.type === 'checkbox') {
-			dom.checked && (obj[dom.name] = dom.value)
-		}else if(dom.name) obj[dom.name] = dom.value
+        cb({
+        	adzoneid : otherAdzones.sub[0].id,
+        	siteid : otherAdzones.id,
+        } , ({ data : { shortLinkUrl } }) => {
+            chrome.tabs.update(tabID , {'url' : shortLinkUrl})
+        })
 	})
-
-	return obj
 }
 
-function whichFormShow (index) {
-	if(index === 3) getPassenger()
+function newBtnEle (text , clickCb){
+	let btn = document.createElement('button')
+	,	{ wrapper , status } = newBtnEle
 
-	document.body.setAttribute('class' , 'form' + index)
+	if(!wrapper) wrapper = newBtnEle.wrapper = document.createDocumentFragment()
+
+	btn.innerHTML = text
+	btn.onclick = clickCb
+
+	wrapper.appendChild(btn)
+
+	if(status) {
+		if(status === 'end') document.body.appendChild(wrapper)
+		else document.body.insertBefore(wrapper , document.body.firstChild)
+
+		newBtnEle.wrapper = newBtnEle.status = null
+	}
+}
+
+function ObjStringData (data) {
+    return data ? '?' + Object.keys(data).map((key) => encodeURIComponent(key) + '=' + encodeURIComponent(data[key])).join('&') : ''
+}
+
+function Fetch (api , data , cb , responseType = 'json'){
+	let bool = api.length !== 2
+	,	newData = ObjStringData(data)
+	,	option = {
+        credentials: 'include',
+        headers : { 'Cache-Control' : 'no-cache' },
+        method : bool ? 'GET' : 'POST'
+	}
+
+	if(!bool) {
+		option.body = newData.slice(1)
+		option.headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=utf-8'
+	}
+
+    let promise = fetch((typeof api === 'string' ? api : `http://pub.alimama.com/${ api[0] }.json`) + (bool ? newData : '') , option)
+    .then(res => res[responseType]())
+    .catch(error => sendMsg('请重新登录阿里妈妈!'))
+    
+    if(cb) promise.then(res => cb(res))
+
+    return promise
+}
+
+function sendMsg (msg) {
+    new Notification(msg , {
+        icon : './logo.png'
+    })
 }

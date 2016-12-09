@@ -76,11 +76,12 @@ function makeFeeBtn (itemID , sellerID){
 		Fetch(['items/search'] , { q : 'https://item.taobao.com/item.htm?id=' + itemID }),
 		Fetch('http://zhushou.taokezhushou.com/api/v1/queqiaos/' + itemID)
 	])
-	.then(([{ data : { campaignList } } , { data : { pageList } } , { data : queqiaos }]) => {
-		let { tkRate , auctionId , zkPrice , tkSpecialCampaignIdRateMap } = pageList[0]
+	.then(([{ data : dingxiang } , { data : { pageList : tongyong } } , { data : queqiaos }]) => {
+		let { tkRate , auctionId , zkPrice , tkSpecialCampaignIdRateMap } = tongyong ? tongyong[0] : []
 		,	IDArray = ['auctionid' , auctionId]
+		,	$loading = document.querySelector('.loading')
 
-		campaignList.forEach(({ properties , campaignId , shopKeeperId }) => {
+		dingxiang && dingxiang.campaignList.forEach(({ properties , campaignId , shopKeeperId }) => {
 			if(properties === 1 && campaignId !== 0)
 				newBtnEle(`定向${ calc(tkSpecialCampaignIdRateMap[campaignId]) }` , () => getDingXiangURL({
 					campId : campaignId,
@@ -96,8 +97,12 @@ function makeFeeBtn (itemID , sellerID){
 			})))
 		})
 
-		newBtnEle.status = 'before'
-		newBtnEle(`通用${ calc(tkRate) }` , () => getShortURL(IDArray))
+		if(tongyong) {
+			newBtnEle.status = 'before'
+			newBtnEle(`通用${ calc(tkRate) }` , () => getShortURL(IDArray))
+		}else if (document.body.firstElementChild === $loading) {
+			$loading.innerHTML = '无佣金活动'
+		}
 
 		function calc (rate){
 			return `(${ zkPrice } * ${ rate }% = ${ zkPrice * rate / 100 })`

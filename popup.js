@@ -89,7 +89,7 @@ function makeFeeBtn (itemID , sellerID){
 				}))
 		})
 
-		queqiaos.forEach(({ final_rate , event_id }) => {
+		queqiaos && queqiaos.forEach(({ final_rate , event_id }) => {
 			newBtnEle(`鹊桥${ calc(final_rate) }` , () => getShortURL(IDArray.concat({
 				scenes : 3,
 				channel : 'tk_qqhd',

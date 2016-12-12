@@ -1,4 +1,4 @@
-chrome.tabs.query({ active : true } , ([{ id , url }]) => {
+chrome.tabs.query({ active : true } , ([{ id , url , index }]) => {
 	if(/(tmall|taobao).com\/(item|home).htm/.test(url)) {
         let itemID
         ,   cb = $1 => itemID = $1
@@ -12,10 +12,11 @@ chrome.tabs.query({ active : true } , ([{ id , url }]) => {
         getShortURL = getShortURL.bind(null , id)
 
         getCoupons(itemID)
+
+        makeBtn.createTabIndex = index
     }else {
         sendMsg('此页面非天猫或淘宝的商品详情页！')
     }
-
 })
 
 //获取优惠券
@@ -25,19 +26,22 @@ function getCoupons (itemID){
 			makeFeeBtn(itemID , $3)
 
 			Promise.all([
-				Fetch(`http://zhushou3.taokezhushou.com/api/v1/coupons_base/${ $3 }` , { item_id : itemID }),
+				//固定：两个fetch上下顺序
+				//因为：先将购物车的优惠券加进idArray数组，再判断其他是否隐藏券
 				Fetch('https://cart.taobao.com/json/GetPriceVolume.do' , { sellerId : $3 }),
+				Fetch(`http://zhushou3.taokezhushou.com/api/v1/coupons_base/${ $3 }` , { item_id : itemID }),
 			])
-			.then(([{ data } , { priceVolumes }]) => {
+			.then(([{ priceVolumes } , { data }]) => {
 				let coupons = []
 				,	idArray = []
 				,	fetchList = []
 
-				data.concat(priceVolumes).forEach(({ activity_id , id }) => {
+				priceVolumes.concat(data).forEach(({ activity_id , id , title }) => {
 					let couponURL = `http://shop.m.taobao.com/shop/coupon.htm?seller_id=${ $3 }&activity_id=${ activity_id || id }`
 
 					if(idArray.indexOf(couponURL) === -1) {
 						idArray.push(couponURL)
+						coupons.push({ isHidden : title ? false : true })
 						fetchList.push(Fetch(couponURL , 0 , 0 , 'text'))
 					}
 				})	
@@ -45,7 +49,7 @@ function getCoupons (itemID){
 				Promise.all(fetchList)
 				.then(([...textList]) => {
 					textList.forEach((text , index) => {
-						coupons.push({
+						Object.assign(coupons[index] , {
 							array : text.match(/<dl>(\s|\S)+<\/dl>/)[0].match(/((\d+元优惠券)|(满(\d|\.)+)|(限领\d*)|(有效期.+\d))/g),
 							url : idArray[index]
 						})
@@ -60,12 +64,15 @@ function getCoupons (itemID){
 
 //生成button按钮
 function makeBtn (coupons){
-	coupons.forEach(({ array , url } , index) => {
+	coupons.forEach(({ array , url , isHidden } , index) => {
 		if(index === coupons.length - 1) newBtnEle.status = 'end'
 
 		newBtnEle(
-			`${ array[1] }减${ array[0].match(/\d+/)[0] }(${ array[2] }张)<br>${ array[3] }`,
-			() => chrome.tabs.create({ url })
+			`${ array[1] }减${ array[0].match(/\d+/)[0] }  [${ array[2] }张${ isHidden ? ' , 隐' : '' }]<br>${ array[3] }`,
+			() => chrome.tabs.create({
+				url,
+				index : makeBtn.createTabIndex + 1,
+			})
 		)
 	})
 }
@@ -90,8 +97,9 @@ function makeFeeBtn (itemID , sellerID){
 				}))
 		})
 
-		queqiaos && queqiaos.forEach(({ final_rate , event_id }) => {
-			newBtnEle(`鹊桥${ calc(final_rate) }` , () => getShortURL(IDArray.concat({
+		queqiaos && queqiaos.forEach(({ final_rate , left_day }) => {
+			//剩余天数为0去掉
+			left_day && newBtnEle(`鹊桥${ calc(final_rate) }` , () => getShortURL(IDArray.concat({
 				scenes : 3,
 				channel : 'tk_qqhd',
 			})))
@@ -105,13 +113,15 @@ function makeFeeBtn (itemID , sellerID){
 		}
 
 		function calc (rate){
-			return `(${ zkPrice } * ${ rate }% = ${ zkPrice * rate / 100 })`
+			return `(${ zkPrice } * ${ rate }% = ${ (zkPrice * rate / 100).toFixed(2) })`
 		}
 	})
 }
 
 //定向佣金
 function getDingXiangURL ({ campId , keeperid , sellerID }){
+	sendMsg('重定向到店铺首页，请手动进入商品')
+
 	Fetch(['pubauc/applyForCommonCampaign' , 'POST'] , {
 		_tb_token_ : '7kYCHxQ2Y9q',//required
 		applyreason : '手动点赞~  ' + new Date().toLocaleTimeString(),
@@ -121,13 +131,17 @@ function getDingXiangURL ({ campId , keeperid , sellerID }){
 }
 
 //获取短链接，公用方法
-function getShortURL (tabID , [IDName , ID , otherObj]){
+function getShortURL (tabID , [IDName , ID , otherObj = { scenes : 1 }]){
 	getSomeID(tabID , (IDObj , cb) => {
-		if(otherObj) Object.assign(IDObj , otherObj)
-
-        Fetch([`common/code/${ IDName === 'auctionid' ? 'getAuctionCode' : 'getShopCode' }`] , Object.assign({
-            [IDName] : ID,
-        } , IDObj) , cb)
+        Fetch(
+        	[`common/code/${ IDName === 'auctionid' ? 'getAuctionCode' : 'getShopCode' }`],
+        	Object.assign(
+        		{ [IDName] : ID },
+        		IDObj,
+        		otherObj
+        	),
+        	cb
+        )
 	})
 }
 
@@ -185,7 +199,7 @@ function Fetch (api , data , cb , responseType = 'json'){
 
     let promise = fetch((typeof api === 'string' ? api : `http://pub.alimama.com/${ api[0] }.json`) + (bool ? newData : '') , option)
     .then(res => res[responseType]())
-    .catch(error => sendMsg('请重新登录阿里妈妈!'))
+    .catch(error => sendMsg('请重新登录阿里妈妈或刷新页面!'))
     
     if(cb) promise.then(res => cb(res))
 

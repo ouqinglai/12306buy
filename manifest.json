@@ -1,6 +1,6 @@
 {
     "name" : "taobaobuy",
-    "version" : "1.00",
+    "version" : "1.10",
     "manifest_version" : 2,
     "description" : "taobaobuy plugin",
     "icons": {

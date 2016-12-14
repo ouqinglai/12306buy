@@ -6,7 +6,8 @@
 >
 > **browser :** 请使用最新360极速浏览器.
 >
-> **passenger :** 请先到[12306](https://kyfw.12306.cn/otn/passengers/addInit)设置一个常用联系人.
+> **passenger :** 请先到[12306](https://kyfw.12306.cn/otn/passengers/addInit)设置一个常用联系人. 
+
 ## step
 
 ### login 12306

@@ -1,4 +1,4 @@
-# 分支介绍：[淘客助手](https://github.com/ouqinglai/12306buy/tree/taobaobuy) [12306订票助手](https://github.com/ouqinglai/12306buy) [12306旧版(弃)](https://github.com/ouqinglai/12306buy/tree/old_dama)
+# 分支：[淘客助手](https://github.com/ouqinglai/12306buy/tree/taobaobuy) [12306订票助手](https://github.com/ouqinglai/12306buy) [12306旧版(弃)](https://github.com/ouqinglai/12306buy/tree/old_dama)
 
 > 淘客助手：taobaobuy chrome extension plugin 浏览器插件
 >

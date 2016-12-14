@@ -3,6 +3,7 @@
 > 淘客助手：taobaobuy chrome extension plugin 浏览器插件
 >
 > 一键获取佣金链接(只显示非人工审核)，并重定向。领取优惠券，包括隐藏券
+>
 > **browser :** 尽量使用最新chrome浏览器.
 
 ## step

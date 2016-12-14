@@ -1,4 +1,4 @@
-# taobaobuy 淘客助手
+# 分支介绍：[淘客助手](https://github.com/ouqinglai/12306buy/tree/taobaobuy) [12306订票助手](https://github.com/ouqinglai/12306buy) [12306旧版(弃)](https://github.com/ouqinglai/12306buy/tree/old_dama)
 taobaobuy chrome extension plugin 浏览器插件
 一键获取佣金链接(只显示非人工审核)，并重定向。领取优惠券，包括隐藏券
 * **browser :** 尽量使用最新chrome浏览器.

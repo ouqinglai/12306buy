@@ -12,8 +12,6 @@ chrome.tabs.query({ active : true } , ([{ id , url , index }]) => {
         getShortURL = getShortURL.bind(null , id)
 
         getCoupons(itemID)
-
-        makeBtn.createTabIndex = index
     }else {
         sendMsg('此页面非天猫或淘宝的商品详情页！')
     }
@@ -37,42 +35,54 @@ function getCoupons (itemID){
 				,	fetchList = []
 
 				priceVolumes.concat(data).forEach(({ activity_id , id , title }) => {
-					let couponURL = `http://shop.m.taobao.com/shop/coupon.htm?seller_id=${ $3 }&activity_id=${ activity_id || id }`
+					id = activity_id || id
 
-					if(idArray.indexOf(couponURL) === -1) {
-						idArray.push(couponURL)
+					if(idArray.indexOf(id) === -1) {
+						idArray.push(id)
 						coupons.push({ isHidden : title ? false : true })
-						fetchList.push(Fetch(couponURL , 0 , 0 , 'text'))
+						fetchList.push(Fetch(`http://shop.m.taobao.com/shop/coupon.htm?seller_id=${ $3 }&activity_id=${ id }` , 0 , 0 , 'text'))
 					}
 				})	
 
 				Promise.all(fetchList)
 				.then(([...textList]) => {
 					textList.forEach((text , index) => {
+						let array
+						,	activityId
+						,	appKey
+
+						text.replace(/((<dl>(\s|\S)+<\/dl>)|(activityId="\d+")|(J_app_key" value="\d+"))/g , (...$) => {
+							$[2] && (array = $[2].match(/((\d+元优惠券)|(满(\d|\.)+)|(限领[\d不限]*)|(有效期.+\d))/g))
+
+							$[4] && (activityId = $[4].match(/\d+/)[0])
+
+							$[5] && (appKey = $[5].match(/\d+/)[0])
+						})
+
 						Object.assign(coupons[index] , {
-							array : text.match(/<dl>(\s|\S)+<\/dl>/)[0].match(/((\d+元优惠券)|(满(\d|\.)+)|(限领\d*)|(有效期.+\d))/g),
-							url : idArray[index]
+							array,
+							activityId,
+							appKey,
 						})
 					})
 
-					makeBtn(coupons)
+					makeCouponsBtn(coupons , $3)
 				})		
 			})
 		})
 	} , 'text')
 }
 
-//生成button按钮
-function makeBtn (coupons){
-	coupons.forEach(({ array , url , isHidden } , index) => {
+//生成优惠券button按钮
+function makeCouponsBtn (coupons , sellerId){
+	coupons = coupons.filter(({ array }) => array)//过滤优惠券不存在
+
+	coupons.forEach(({ array , activityId , appKey , isHidden } , index) => {
 		if(index === coupons.length - 1) newBtnEle.status = 'end'
 
 		newBtnEle(
 			`${ array[1] }减${ array[0].match(/\d+/)[0] }  [${ array[2] }张${ isHidden ? ' , 隐' : '' }]<br>${ array[3] }`,
-			() => chrome.tabs.create({
-				url,
-				index : makeBtn.createTabIndex + 1,
-			})
+			() => getCouponsFromTaoBaoApi({activityId , sellerId , appKey})
 		)
 	})
 }
@@ -145,6 +155,39 @@ function getShortURL (tabID , [IDName , ID , otherObj = { scenes : 1 }]){
 	})
 }
 
+//直接请求淘宝领取优惠券
+function getCouponsFromTaoBaoApi ({activityId , sellerId , appKey}){
+	let time = +new Date
+	,	url = 'http://unzbyun.api.m.taobao.com/rest/h5ApiUpdate.do'
+	,   data = JSON.stringify({
+		sellerId,
+		activityId,
+	})
+
+	chrome.cookies.get({
+		url : url + '*',
+		name : '_m_h5_tk'
+	} , cookie => {
+		Fetch(url , {
+			callback: 'jsonpCallback',
+			type: 'jsonp',
+			api: 'mtop.shop.applyShopbonus',
+			v: '1.0',
+			appKey,
+			data,
+			t : time,
+			sign : taobaoSign(cookie.value.split('_')[0] + "&" + time + "&" + appKey + "&" + data),
+		} , text => {
+			let bool = /SUCCESS/.test(text)
+
+			sendMsg(
+				'领取' + (bool ? '成功' : '失败'),
+				bool ? '' : text.match(/ret.+::(\W+)"\]/)[1]
+			)
+		} , 'text')
+	})
+}
+
 //获取广告位信息
 function getSomeID (tabID , cb){
 	Fetch(['common/adzone/newSelfAdzone2'] , { tag : '29' } , ({ data : { otherAdzones , otherList } }) => {
@@ -206,8 +249,13 @@ function Fetch (api , data , cb , responseType = 'json'){
     return promise
 }
 
-function sendMsg (msg) {
-    new Notification(msg , {
-        icon : './logo.png'
+//先定义close事件
+sendMsg.clearID = { close : f => f }
+function sendMsg (msg , body = '') {
+	sendMsg.clearID.close()
+
+    sendMsg.clearID = new Notification(msg , {
+        icon : './logo.png',
+        body,
     })
 }

@@ -179,11 +179,16 @@ function getCouponsFromTaoBaoApi ({activityId , sellerId , appKey}){
 			sign : taobaoSign(cookie.value.split('_')[0] + "&" + time + "&" + appKey + "&" + data),
 		} , text => {
 			let bool = /SUCCESS/.test(text)
+			,	msg = text.match(/ret.+::(\W+)"\]/)[1]
 
-			sendMsg(
-				'领取' + (bool ? '成功' : '失败'),
-				bool ? '' : text.match(/ret.+::(\W+)"\]/)[1]
-			)
+			if(msg === '令牌过期') {
+				getCouponsFromTaoBaoApi(...arguments)
+			}else {
+				sendMsg(
+					'领取' + (bool ? '成功' : '失败'),
+					bool ? '' : msg
+				)
+			}
 		} , 'text')
 	})
 }
@@ -242,7 +247,7 @@ function Fetch (api , data , cb , responseType = 'json'){
 
     let promise = fetch((typeof api === 'string' ? api : `http://pub.alimama.com/${ api[0] }.json`) + (bool ? newData : '') , option)
     .then(res => res[responseType]())
-    .catch(error => sendMsg('请重新登录阿里妈妈或刷新页面!'))
+    .catch(error => sendMsg('请刷新页面或重新登录阿里妈妈!'))
     
     if(cb) promise.then(res => cb(res))
 
@@ -253,7 +258,7 @@ function Fetch (api , data , cb , responseType = 'json'){
 sendMsg.clearID = { close : f => f }
 function sendMsg (msg , body = '') {
 	sendMsg.clearID.close()
-
+	
     sendMsg.clearID = new Notification(msg , {
         icon : './logo.png',
         body,

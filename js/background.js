@@ -38,6 +38,7 @@ chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
     _tabId = id
 
     if(match === 'userLogin' || match === 'orderInfo') {
+    	console.log(1)
 		window.clearTimeout(_clearTimeout)
 		chrome.notifications.clear('needToBuy')
 		chrome.notifications.clear('msgBox')
@@ -207,7 +208,7 @@ function queryTicket (){
 				if(_old_start_time) {
 					_noShowMsgBox = false
 
-					sendMsg(['msgCb' , _old_start_time + '班次已停止售票，自动调整下一班' + _start_time , 'queryTicket'])
+					sendMsg(['msgCb' , _old_start_time + '班次已停售，自动调整为' + _start_time , 'queryTicket'])
 				}
 
 				_old_start_time = _start_time//放在if判断之后
@@ -408,6 +409,9 @@ function Fetch (url , data , cb , resType = 'json'){
 				}
 			}else if(cb) cb(res)
 		})
+		.catch(error => {
+			sendMsg(['msgCb' , error , '发生未知错误'])
+		})
 	}
 
 	function error (msg){
@@ -464,7 +468,8 @@ function createNotice (){
 		title += '下单中...'
 		buttons = []
 
-		start()
+		//由于下单不再需要验证码，所以不用通过start()函数启动
+		ckeckOrderInfo()
 	}
 
 	chrome.notifications.create('needToBuy' , {
@@ -502,8 +507,6 @@ function selectTime (data){
 				_is_buy_noSeat = !bool1 && bool2
 
 				str = secretStr
-				// _carId = queryLeftNewDTO.station_train_code
-				// _lishi = queryLeftNewDTO.lishi
 
 				_ticketInfo._other = queryLeftNewDTO//记录火车型号G123、历史时间、to_station_no、seat_types等
 			}

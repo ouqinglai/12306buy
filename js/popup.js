@@ -23,7 +23,7 @@ Fetch('index/initMy12306')
 	whichFormShow(res.url === url1 + 'index/initMy12306' ? 3 : 2)
 })
 
-//当错误提示框后台运行时，点击图片时让它再次显示
+//当错误提示框后台运行时，点击图标时让它再次显示
 chrome.runtime.sendMessage({ match : 'iconClick' })
 
 //获取车站对应编码

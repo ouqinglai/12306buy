@@ -25,12 +25,11 @@ var _randCode = ''
 ,	_type//string 'M'/*一等座*/ , 'O'/*二等座*/ , 9/*商务座*/
 ,	_from//array
 ,	_to//array
-,	_ticketInfo//obj
+,	_ticketInfo = {}//obj
 ,	_token
 ,	_passenger//string
 ,	_passengerStr//string
 ,	_time//array，['16:00'班次时间 , '[-1 , 1]'选取上下1小时内的最快班次]
-,	_carId//火车型号G123
 ,	_start_time = _old_start_time = ''//string，班次出发时间
 
 window.onload = () => _plugin = document.querySelector('#pluginId')
@@ -80,7 +79,7 @@ chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
 
 chrome.notifications.onButtonClicked.addListener((id , btnIndex) => {
 	chrome.notifications.clear(id)
-	if(id === 'needToBuy') start()
+	if(id === 'needToBuy') ckeckOrderInfo()//由于下单不再需要验证码，所以不用通过start()函数启动
 	else if (id === 'msgBox') {
 		if(btnIndex === 0) _noShowMsgBox = _buyIfHasTicket = true
 		else window.clearTimeout(_clearTimeout)
@@ -181,14 +180,28 @@ function login (cb){
 //3、查票
 function queryTicket (){
 	//GET
-	Fetch(_ctx + 'leftTicket/queryX?' + ObjStringData({//GET
+	Fetch(_ctx + 'leftTicket/queryA?' + ObjStringData({//GET
 		'leftTicketDTO.train_date':_toDate,
 		'leftTicketDTO.from_station':_from[1],
 		'leftTicketDTO.to_station':_to[1],
 		'purpose_codes':'ADULT',
 	}) , null , res => {
-		if(_secretStr = selectTime(res.data)) orderTicket()
-		else if(!_isBuyMode) {
+		if(_secretStr = selectTime(res.data)) {
+			let { train_no , from_station_no , to_station_no , seat_types } = _ticketInfo._other
+
+			//获取座位类型价格
+			Fetch(_ctx + 'leftTicket/queryTicketPrice?' + ObjStringData({
+				train_no,
+				from_station_no,
+				to_station_no,
+				seat_types,
+				train_date : _toDate,
+			}) , null , ({ data }) => {
+				/*data : {"OT":[],"WZ":"¥70.0","M":"¥90.0","O":"¥70.0","train_no":"6c000C767902"}*/
+				Object.assign(_ticketInfo._other , data)
+				orderTicket()
+			})
+		}else if(!_isBuyMode) {
 			//用于判断_start_time是否发生了变化，说明之前班次已停止售票
 			if(_old_start_time !== _start_time) {
 				if(_old_start_time) {
@@ -223,10 +236,12 @@ function orderTicket (){
 //5、获取订单html
 function getTicketHtml (){
 	Fetch(_ctx + 'confirmPassenger/initDc' , {} , text => {
-		_ticketInfo = JSON.parse(text.match(/var ticketInfoForPassengerForm.+\};/)[0].replace(/(var ticketInfoForPassengerForm=|\;)/g , '').replace(/\'/g , '"'))
+		Object.assign(_ticketInfo , JSON.parse(text.match(/var ticketInfoForPassengerForm.+\};/)[0].replace(/(var ticketInfoForPassengerForm=|\;)/g , '').replace(/\'/g , '"')))
+
 		_token = text.match(/var globalRepeatSubmitToken.+\;/)[0].replace(/(.+\s|\'|\;)/g , '')
 
 		let isTimeout = ((new Date(_toDate + ' ' + _start_time).getTime() - new Date(_toDate + ' ' + _time[0]).getTime()) / 1000 / 60) > 30/*大于30分钟时要询问用户是否还买票*/
+
 		_isBuyMode && !isTimeout ? start() : createNotice()
 	} , 'text')
 }
@@ -258,8 +273,8 @@ function buy (){
 			roomType:00,
 			dwAll:'N',
 			REPEAT_SUBMIT_TOKEN:_token,
-		} , data => {
-			sendMsg(['msgCb' , '下单状态' , JSON.stringify(data.data)])
+		} , ({ data }) => {
+			sendMsg(['msgCb' , '下单' + (data.submitStatus ? '成功' : '失败') , JSON.stringify(data)])
 			sendMsg(['errorCb'])
 		})
 	} , 500)
@@ -269,23 +284,30 @@ function buy (){
 function checkCode (position , isReLogin){
 	_randCode = position.replace(/[()]/g , '')
 
-	Fetch(_ctx + 'passcodeNew/checkRandCodeAnsyn' , {
-		randCode : _randCode,
-		rand : _module.rand
-	} , data => {
-		if(data.data.msg === 'TRUE') {
-			sendMsg(['msgCb' , _module.module + 'ing' , 'checkCode'])
+	setTimeout(() => {
+		Fetch(_ctx + 'passcodeNew/checkRandCodeAnsyn' , {
+			randCode : _randCode,
+			rand : _module.rand
+		} , data => {
+			let msg = data.data.msg
 
-			setTimeout(() => {
-				if(_module.module === 'login') login(isReLogin ? orderTicket : '')
-				else ckeckOrderInfo()
-			} , 500)
-		}
-		else {
-			_randCode = ''
-			start(isReLogin)
-		}
-	})
+			sendMsg(['loading'])
+
+			if(msg === 'TRUE') {
+				sendMsg(['msgCb' , _module.module + 'ing' , 'checkCode'])
+
+				setTimeout(() => {
+					if(_module.module === 'login') login(isReLogin ? orderTicket : '')
+					else ckeckOrderInfo()
+				} , 500)
+			}else if(msg === '') {
+				checkCode(position , isReLogin)
+			}else {
+				_randCode = ''
+				start(isReLogin)
+			}
+		})
+	} , 4000)//等待4s返回的msg才有内容
 }
 
 //获取验证码图片
@@ -324,7 +346,6 @@ function sendImg2Plugin (imgBase64 , isReLogin){
 	xhr.setRequestHeader('Content-Type' , 'application/x-www-form-urlencoded')
 
 	xhr.onreadystatechange = () => {
-		sendMsg(['loading'])
 	    if (xhr.readyState == 4) {
 	    	if(xhr.status == 200) {
 	            let res = JSON.parse(xhr.responseText).res
@@ -422,13 +443,18 @@ function sendMsg ([match , value , funcName = '' , isAlwayShow = true]) {
 
 //询票成功，是否下单
 function createNotice (){
-	let seat
+	let message
 	,	title = _from[0] + ' 到 ' + _to[0] + `  (${ _toDate })   `
 	,	buttons = [{ title : '立即购买' }]
+	,	otherInfo = _ticketInfo._other
 
-	_ticketInfo.leftDetails.forEach((_seat , index) => {
-		if(_seat.match(_typeArray[_type])) seat = _ticketInfo.leftDetails[index]
-	})
+	if(_is_buy_noSeat) {
+		message = `(无座票  ${ otherInfo.WZ }  !!!)`
+	}else {
+		_ticketInfo.leftDetails.forEach((_seat , index) => {
+			if(_seat.match(_typeArray[_type])) message = _ticketInfo.leftDetails[index].replace('--' , `  ${ otherInfo[_type] }  `)
+		})
+	}
 
 	_noShowMsgBox = false
 
@@ -444,9 +470,9 @@ function createNotice (){
 	chrome.notifications.create('needToBuy' , {
 		type : 'basic',
 		title,//广州南 到 北京西(日期)
-		message : _is_buy_noSeat ? '(无座票!!!)' : seat,//硬卧(426.00元)15张票
+		message,//硬卧(426.00元)15张票
 		iconUrl : 'logo.png',
-		contextMessage : _carId + '   历时' + _lishi + '   出发时间' + _start_time,//火车型号G123  历时  出发时间
+		contextMessage : otherInfo.station_train_code + '   历时' + otherInfo.lishi + '   出发时间' + _start_time,//火车型号G123  历时  出发时间
 		requireInteraction : true,//一直显示
 		buttons,
 	})
@@ -476,8 +502,10 @@ function selectTime (data){
 				_is_buy_noSeat = !bool1 && bool2
 
 				str = secretStr
-				_carId = queryLeftNewDTO.station_train_code
-				_lishi = queryLeftNewDTO.lishi
+				// _carId = queryLeftNewDTO.station_train_code
+				// _lishi = queryLeftNewDTO.lishi
+
+				_ticketInfo._other = queryLeftNewDTO//记录火车型号G123、历史时间、to_station_no、seat_types等
 			}
 
 			return !_isBuyMode || (_isBuyMode && str) ? true : false//return true跳出some循环

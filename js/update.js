@@ -17,6 +17,7 @@ localStorage.getItem('updata_version') !== _date && chrome.management.getSelf(({
 
 				text
 				.match(new RegExp(`<\/a>${ new_version }<\/h2>(\\s\|\\S)+<\/ul>\\s<\/article>`))[0]
+				.match(/<ul>\s(<li>.+<\/li>\s)+<\/ul>/)[0]
 				.match(/<li>.+<\/li>/g)
 				.forEach((li , index) => {
 					changeLog.push({

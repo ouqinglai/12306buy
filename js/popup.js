@@ -1,13 +1,19 @@
-var SUBMIT = $('#order_submit')
-,	url1 = 'https://kyfw.12306.cn/otn/'
+var url1 = 'https://kyfw.12306.cn/otn/'
 ,	user = JSON.parse(localStorage.USER || '{ "user" : "" , "pwd" : "" }')//user和pwd字段固定
 ,	stationName
+,	isSelectStation = {
+	_from : false,//出发地或目的地是否已选中值，false时不能提交form
+	_to : false,
+}
 ,	hook = [e => e.preventDefault() , (match , value) => {
 	chrome.runtime.sendMessage({
         match,
         value,
     })
 }]
+,	$from = $('input[name="from"]')
+,	$to = $('input[name="to"]')
+,	$submit = $('#order_submit')
 
 /* init */
 $('[name="to_date"]').value = new Date().toLocaleDateString().replace(/\//g , '-')
@@ -27,17 +33,71 @@ Fetch('index/initMy12306')
 chrome.runtime.sendMessage({ match : 'iconClick' })
 
 //获取车站对应编码
-Fetch('resources/js/framework/station_name.js?station_version=1.8971' , res => stationName = res , 'text')
+Fetch('resources/js/framework/station_name.js?station_version=1.8971' , res => {
+	stationName = res
+
+	isSelectStation = {
+		_from : !!res.match($from.value),
+		_to : !!res.match($to.value),
+	}
+} , 'text')
 
 /* eventBind */
-$('#loginForm').onsubmit = function (e) {
+$('#loginForm').onsubmit = e => {
 	hook[0](e)
 
 	hook[1]('userLogin' , formData(this))
 }
 
-$('#order').onsubmit = function (e) {
+$to.onblur = $from.onblur = function (){
+	let $select = this.nextElementSibling
+
+	if((new RegExp(`<li>${ this.value }<\/li>`)).test($select.outerHTML)) {
+		isSelectStation['_' + this.getAttribute('name')] = true
+	}
+	setTimeout(() => {
+		$select.style.display = 'none'
+	} , 100)
+}
+
+$to.onkeyup = $to.onclick = $from.onkeyup = $from.onclick = function (e) {
+	let _inputSelf = this
+	,	val = _inputSelf.value
+	,	inputName = _inputSelf.getAttribute('name')
+	,	nextSelectDom = _inputSelf.nextElementSibling
+	,	wrapperDom = document.createDocumentFragment()
+
+	e.type !== 'click' && (isSelectStation['_' + inputName] = false)
+
+	if(val) {
+		nextSelectDom.innerHTML = '<span class="no-more">查找无效~</span>'
+
+		let match = stationName.match(new RegExp(`\\|${ val }\\W*\\|` , 'g'))
+		match && match.forEach(name => {
+			let li = document.createElement('li')
+
+			li.innerHTML = name.replace(/\|/g , '')
+			li.onclick = function (){
+				nextSelectDom.style.display = 'none'
+
+				isSelectStation['_' + inputName] = true
+
+				_inputSelf.value = this.innerHTML
+			}
+
+			wrapperDom.appendChild(li)
+		})
+
+		nextSelectDom.insertBefore(wrapperDom , nextSelectDom.childNodes[0])
+		nextSelectDom.style.display = 'block'
+	}
+}
+
+$('#order').onsubmit = e => {
 	hook[0](e)
+
+	if(!isSelectStation._from) return alert('出发地无效！')
+	if(!isSelectStation._to) return alert('目的地无效！')
 
 	let orderInfo = formData(this)
 	,	{ from , to } = orderInfo
@@ -46,7 +106,7 @@ $('#order').onsubmit = function (e) {
 	orderInfo.to = findStationCode(to)
 	orderInfo.user = user
 
-	if(orderInfo.mode === 'buy') SUBMIT.setAttribute('disabled' , '')
+	if(orderInfo.mode === 'buy') $submit.setAttribute('disabled' , '')
 
 	hook[1]('orderInfo' , orderInfo)
 }
@@ -56,7 +116,7 @@ chrome.runtime.onMessage.addListener(({ match , value }) => {
 		localStorage.USER = JSON.stringify(value)
 		whichFormShow(3)
 	}else if (match === 'errorCb') {
-		SUBMIT.removeAttribute('disabled')
+		$submit.removeAttribute('disabled')
 	}else if (match === 'loading') {
 		$$forEach('button[type="submit"]' , dom => dom.classList.toggle('loading'))
 	}
@@ -72,7 +132,7 @@ function getPassenger (){
 		if(passenger) {
 			Array('passenger_name' , 'passenger_id_no' , 'mobile_no').forEach(id => $('#' + id).value = passenger[id] || '(无)')
 		}else {
-			SUBMIT.setAttribute('disabled' , '')
+			$submit.setAttribute('disabled' , '')
 			new Notification('请先设置常用联系人！' , {
 				icon : './logo.png'
 			})
@@ -83,7 +143,7 @@ function getPassenger (){
 function Fetch (api , cb , type = 'json') {
 	let promise = fetch(url1 + api , {
 		credentials: 'include',
-		// headers : { 'Cache-Control' : 'no-cache' }
+		headers : { 'Cache-Control' : 'no-cache' }
 	})
 
 	if(cb) {

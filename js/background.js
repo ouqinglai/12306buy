@@ -38,7 +38,6 @@ chrome.runtime.onMessage.addListener(({ match , value } , { id }) => {
     _tabId = id
 
     if(match === 'userLogin' || match === 'orderInfo') {
-    	console.log(1)
 		window.clearTimeout(_clearTimeout)
 		chrome.notifications.clear('needToBuy')
 		chrome.notifications.clear('msgBox')
@@ -282,33 +281,39 @@ function buy (){
 }
 
 //验证图片结果是否正确
-function checkCode (position , isReLogin){
+function checkCode (position , isReLogin , isRunSelf){
 	_randCode = position.replace(/[()]/g , '')
 
-	setTimeout(() => {
-		Fetch(_ctx + 'passcodeNew/checkRandCodeAnsyn' , {
-			randCode : _randCode,
-			rand : _module.rand
-		} , data => {
-			let msg = data.data.msg
+	checkCode.isRunSelf = isRunSelf
 
-			sendMsg(['loading'])
+	Fetch(_ctx + 'passcodeNew/checkRandCodeAnsyn' , {
+		randCode : _randCode,
+		rand : _module.rand
+	} , data => {
+		let msg = data.data.msg
 
-			if(msg === 'TRUE') {
-				sendMsg(['msgCb' , _module.module + 'ing' , 'checkCode'])
+		//通过记录两个checkCode.isRunSelf值，来判断是否在msg === ''循环时又重新点击checkCode函数
+		if(checkCode.isRunSelf2 && !checkCode.isRunSelf) {
+			checkCode.isRunSelf2 = false
 
-				setTimeout(() => {
-					if(_module.module === 'login') login(isReLogin ? orderTicket : '')
-					else ckeckOrderInfo()
-				} , 500)
-			}else if(msg === '') {
-				checkCode(position , isReLogin)
-			}else {
-				_randCode = ''
-				start(isReLogin)
-			}
-		})
-	} , 4000)//等待4s返回的msg才有内容
+			return
+		}
+
+		if(msg === 'TRUE') {
+			sendMsg(['msgCb' , _module.module + 'ing' , 'checkCode'])
+
+			login(isReLogin ? orderTicket : '')
+			// setTimeout(() => {
+			// 	if(_module.module === 'login') login(isReLogin ? orderTicket : '')
+			// 	else ckeckOrderInfo()
+			// } , 500)
+		}else if(msg === '') {
+			checkCode(position , isReLogin , checkCode.isRunSelf2 = true)
+		}else {
+			_randCode = ''
+			start(isReLogin)
+		}
+	})
 }
 
 //获取验证码图片
@@ -334,8 +339,6 @@ function sendImg2Plugin (imgBase64 , isReLogin){
 
 	/*XMLHttpRequest Origin 有效*/
 
-	sendMsg(['loading'])
-
 	var xhr = new XMLHttpRequest
  
 	xhr.open('POST' , 'http://check.huochepiao.360.cn/img_vcode' , true)
@@ -353,7 +356,7 @@ function sendImg2Plugin (imgBase64 , isReLogin){
 	 
 	            sendMsg(['msgCb' , 'code：' + res , '获取验证码结果'])
 
-				res ? checkCode(res , isReLogin) : start(isReLogin)
+				res ? setTimeout(() => checkCode(res , isReLogin) , 2500) : start(isReLogin)
 	    	}else {
 	    		start(isReLogin)
 	    	}

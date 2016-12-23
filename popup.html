@@ -93,6 +93,60 @@
 			font-size: 13px;
 			font-weight: normal;
 		}
+		.select-wrapper {
+			position: relative;
+		}
+		.select {
+			display: none;
+	        position: absolute;
+		    width: 185px;
+		    max-height: 265px;
+		    list-style: none;
+		    padding: 0 0 10px 0;
+		    margin: 0;
+		    background-color: #fff;
+		    border: 1px solid #A9A9A9;
+		    border-top: none;
+		    overflow-y: auto;
+		}
+		.select:after {
+			content: '';
+			display: block;
+			clear: both;
+		}
+		.select li {
+	        float: left;
+		    padding: 0 10px;
+		    margin: 6px 0 0 5px;
+		    line-height: 30px;
+		    background-color: #c8e3fc;
+		    color: #05a;
+		    border-radius: 3px;
+		}
+		.select li:hover {
+			background-color: #69AAE6;
+			cursor: pointer;
+		}
+		.select .no-more {
+			display: none;
+			line-height: 30px;
+			margin: 6px 0 -10px 0;
+			color: #000;
+			text-align: center;
+		    color: #888;
+		}
+		.select .no-more:nth-child(1) {
+			display: block;
+		}
+		.select::-webkit-scrollbar {
+	    	width:18px;
+	    	background-color: #F5F5F5;
+	    }
+	    .select::-webkit-scrollbar-thumb {
+    	    border-radius: 10px;
+    	    background-color: #dddde5;
+	        border: 4px solid #F5F5F5;
+	    }
 	</style>
 	<script src="js/popup.js" defer="defer"></script>
 	<script src="js/update.js"></script>
@@ -126,8 +180,16 @@
 				</optgroup>
 			</select>
 		</div>
-		<div>出发地：<input type="text" name="from" placeholder="广州南" required value="广州"></div>
-		<div>目的地：<input type="text" name="to" placeholder="北京西" required value="珠海"></div>
+		<div class="select-wrapper">
+			出发地：
+			<input type="text" name="from" placeholder="广州南" required autocomplete="off" value="广州">
+			<ul class="select"></ul>
+		</div>
+		<div class="select-wrapper">
+			目的地：
+			<input type="text" name="to" placeholder="北京西" required autocomplete="off" value="珠海">
+			<ul class="select"></ul>	
+		</div>
 		<div>出发日期：<input type="date" name="to_date" placeholder="2016-11-15" required></div>
 		<div>坐车时间：<input type="time" name="time" placeholder="16:00" required></div>
 		<!-- <div class="no-required">时间区间：<input type="text" name="time_range" placeholder="[-1,1]表示允许15:00~17:00之间最快班次，-0.5为15:30"></div> -->

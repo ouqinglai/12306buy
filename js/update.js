@@ -10,9 +10,29 @@ localStorage.getItem('updata_version') !== _date && chrome.management.getSelf(({
 		let new_version = res.match(new RegExp('</span>version<span.+</span>,</td>'))[0].match(/([\.\d]+)/)[0]
 
 		if(version < new_version) {
-			new Notification('升级提示！' , {
-				icon : './logo.png',
-				body : `有新版本${ new_version }更新`,
+			fetch(updateUrl.replace('manifest.json' , 'CHANGELOG.md'))
+			.then(text => text.text())
+			.then(text => {
+				let changeLog = []
+
+				text
+				.match(new RegExp(`<\/a>${ new_version }<\/h2>(\\s\|\\S)+<\/ul>\\s<\/article>`))[0]
+				.match(/<li>.+<\/li>/g)
+				.forEach((li , index) => {
+					changeLog.push({
+						title : index + 1 + '.',
+						message : li.replace(/(<li>|<\/li>)/g , '')
+					})
+				})
+				
+				chrome.notifications.create('' , {
+					type: 'list',
+			        title: `新版本${ new_version }升级提示！`,
+			        message: `msg`,
+			        iconUrl: './logo.png',
+			        items: changeLog,
+			        requireInteraction : true,//一直显示
+				})
 			})
 		}
 	})

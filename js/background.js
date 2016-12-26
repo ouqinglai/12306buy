@@ -281,10 +281,11 @@ function buy (){
 }
 
 //验证图片结果是否正确
+checkCode.count = 0//用于统计当msg === ''超过8次后，重新start(isReLogin)
 function checkCode (position , isReLogin , isRunSelf){
 	_randCode = position.replace(/[()]/g , '')
 
-	checkCode.isRunSelf = isRunSelf
+	!isRunSelf && (checkCode.position = position)
 
 	Fetch(_ctx + 'passcodeNew/checkRandCodeAnsyn' , {
 		randCode : _randCode,
@@ -293,11 +294,7 @@ function checkCode (position , isReLogin , isRunSelf){
 		let msg = data.data.msg
 
 		//通过记录两个checkCode.isRunSelf值，来判断是否在msg === ''循环时又重新点击checkCode函数
-		if(checkCode.isRunSelf2 && !checkCode.isRunSelf) {
-			checkCode.isRunSelf2 = false
-
-			return
-		}
+		if(isRunSelf && position !== checkCode.position) return
 
 		if(msg === 'TRUE') {
 			sendMsg(['msgCb' , _module.module + 'ing' , 'checkCode'])
@@ -308,9 +305,17 @@ function checkCode (position , isReLogin , isRunSelf){
 			// 	else ckeckOrderInfo()
 			// } , 500)
 		}else if(msg === '') {
-			checkCode(position , isReLogin , checkCode.isRunSelf2 = true)
+			++checkCode.count
+			checkCode.position = position
+
+			if(checkCode.count > 8) {
+				checkCode.count = 0
+
+				start(isReLogin)
+			}else {
+				checkCode(position , isReLogin , true)
+			}
 		}else {
-			_randCode = ''
 			start(isReLogin)
 		}
 	})

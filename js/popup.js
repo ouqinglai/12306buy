@@ -33,14 +33,16 @@ Fetch('index/initMy12306')
 chrome.runtime.sendMessage({ match : 'iconClick' })
 
 //获取车站对应编码
-Fetch('resources/js/framework/station_name.js?station_version=1.8971' , res => {
+fetch(chrome.extension.getURL('js/stationName.txt'))
+.then(res => res.text())
+.then(res => {
 	stationName = res
 
 	isSelectStation = {
 		_from : !!res.match($from.value),
 		_to : !!res.match($to.value),
 	}
-} , 'text')
+})
 
 /* eventBind */
 $('#loginForm').onsubmit = e => {

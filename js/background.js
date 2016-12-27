@@ -111,7 +111,7 @@ chrome.webRequest.onBeforeSendHeaders.addListener(({ url , requestHeaders }) => 
 		Array(
 			'loginAysnSuggest',
 			'submitOrderRequest',
-			'queryX',
+			localStorage.getItem('leftTicket') || 'queryA',
 			'checkOrderInfo',
 			'confirmSingleForQueue',
 			'checkRandCodeAnsyn',
@@ -180,12 +180,12 @@ function login (cb){
 //3、查票
 function queryTicket (){
 	//GET
-	Fetch(_ctx + 'leftTicket/queryA?' + ObjStringData({//GET
+	Fetch(`${ _ctx }leftTicket/${ localStorage.getItem('leftTicket') || 'queryA' }?${ ObjStringData({//GET
 		'leftTicketDTO.train_date':_toDate,
 		'leftTicketDTO.from_station':_from[1],
 		'leftTicketDTO.to_station':_to[1],
 		'purpose_codes':'ADULT',
-	}) , null , res => {
+	}) }` , null , res => {
 		if(_secretStr = selectTime(res.data)) {
 			let { train_no , from_station_no , to_station_no , seat_types } = _ticketInfo._other
 
@@ -418,6 +418,19 @@ function Fetch (url , data , cb , resType = 'json'){
 			}else if(cb) cb(res)
 		})
 		.catch(error => {
+			//由于查询余票接口经常改动，所以采用请求github的manifest.json方法获得最新的接口
+			if(/leftTicket\/query.+\?/.test(url)) {
+				chrome.management.getSelf(({ updateUrl }) => {
+					Fetch(updateUrl , null , text => {
+						let leftTicket = text.match(new RegExp('</span>update_url<span.+</span>,</td>'))[0].match(/\?(.+)<span/)[1]
+						localStorage.setItem('leftTicket' , leftTicket)
+
+						url = url.replace(/query./ , leftTicket)
+						ajax()
+					} , 'text')
+				})
+			}
+			ajax()
 			sendMsg(['msgCb' , error , '发生未知错误'])
 		})
 	}
@@ -436,6 +449,7 @@ function sendMsg ([match , value , funcName = '' , isAlwayShow = true]) {
 
 		++_errorCount
 
+		console.log(!_noShowMsgBox)
 		!_noShowMsgBox && chrome.notifications[_initMsgBox ? 'update' : 'create']('msgBox' , {
 			type : 'basic',
 			title : '提示' + _errorCount,

@@ -431,7 +431,7 @@ function Fetch (url , data , cb , resType = 'json'){
 				})
 			}
 			ajax()
-			sendMsg(['msgCb' , error , '发生未知错误'])
+			sendMsg(['msgCb' , JSON.stringify(error) , '发生未知错误'])
 		})
 	}
 
@@ -449,7 +449,6 @@ function sendMsg ([match , value , funcName = '' , isAlwayShow = true]) {
 
 		++_errorCount
 
-		console.log(!_noShowMsgBox)
 		!_noShowMsgBox && chrome.notifications[_initMsgBox ? 'update' : 'create']('msgBox' , {
 			type : 'basic',
 			title : '提示' + _errorCount,

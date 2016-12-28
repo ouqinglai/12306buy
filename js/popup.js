@@ -24,10 +24,7 @@ $('[name="user"]').value = user.user
 $('[name="pwd"]').value = user.pwd
 
 //check 12306 login
-Fetch('index/initMy12306')
-.then(res => {
-	whichFormShow(res.url === url1 + 'index/initMy12306' ? 3 : 2)
-})
+Fetch('login/checkUser' , res => whichFormShow(res.data.flag ? 3 : 2))
 
 //当错误提示框后台运行时，点击图标时让它再次显示
 chrome.runtime.sendMessage({ match : 'iconClick' })

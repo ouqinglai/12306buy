@@ -1,6 +1,6 @@
 {
     "name" : "12306buy",
-    "version" : "1.40",
+    "version" : "1.41",
     "manifest_version" : 2,
     "description" : "12306buy plugin",
     "icons": {
@@ -21,7 +21,7 @@
         "webRequestBlocking"
     ],
     "plugins": [{
-      "path": "plugin/helper.dll"
+        "path": "plugin/helper.dll"
     }],
     "update_url" : "https://github.com/ouqinglai/12306buy/blob/master/manifest.json?queryZ",
     "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCpANivE+0xzITS4VXIQFwynZn29tuKnKOz3fc0oFSCbrqmVxgH9wGVoEWMCqju9J085D5GGxzOk5tvWG0eFLq11Feywn+YunXqzcfP1BGtrPKeCD2F8A3pOWQOw1UQF7GRoJhRamHdsx2zqslQ6ftjx9K//Cq4akIZHAErmeRjoQIDAQAB",

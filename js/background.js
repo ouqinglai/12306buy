@@ -99,13 +99,6 @@ chrome.notifications.onClosed.addListener((id , byUser) => {
 	}
 })
 
-//处理Provisional headers are shown请求
-// chrome.webRequest.onBeforeRequest.addListener(
-// 	({ url }) => ({ redirectUrl : url.replace(chrome.extension.getURL('') , 'http://check.huochepiao.360.cn/') }),
-//     { urls: [chrome.extension.getURL('img_vcode')] },
-//     ['blocking']
-// )
-
 //请求headers 添加Origin、Referer字段
 chrome.webRequest.onBeforeSendHeaders.addListener(({ url , requestHeaders }) => {
 		Array(
@@ -178,7 +171,7 @@ function login (cb){
 }
 
 //3、查票
-function queryTicket (){
+function queryTicket (_undefined){
 	//GET
 	Fetch(`${ _ctx }leftTicket/${ localStorage.getItem('leftTicket') || 'queryA' }?${ ObjStringData({//GET
 		'leftTicketDTO.train_date':_toDate,
@@ -201,7 +194,7 @@ function queryTicket (){
 				Object.assign(_ticketInfo._other , data)
 				orderTicket()
 			})
-		}else if(!_isBuyMode) {
+		}else if(!_isBuyMode && _secretStr === _undefined) {
 			//用于判断_start_time是否发生了变化，说明之前班次已停止售票
 			if(_old_start_time !== _start_time) {
 				if(_old_start_time) {
@@ -388,6 +381,7 @@ function Fetch (url , data , cb , resType = 'json'){
 			'Upgrade-Insecure-Requests' : 1//让loginAysnSuggest请求通过
 		}
 	}
+	,	timeout = 3500//timeout 3.5s
 
 	if(data) {
 		other.method = 'POST'
@@ -401,44 +395,56 @@ function Fetch (url , data , cb , resType = 'json'){
 	}
 	
 	sendMsg(['loading'])
+
 	ajax()
 	function ajax (){
-		fetch(url , other)
-		.then(res => res[resType]())
+		//这里使用Promise.race，以最快 resolve 或 reject 的结果来传入后续绑定的回调
+		Promise.race([
+			fetch(url , other)
+			.then(res => res[resType]())
+			.catch(error => {
+				//由于查询余票接口经常改动，所以采用请求github的manifest.json方法获得最新的接口
+				if(/leftTicket\/query.+\?/.test(url)) {
+					chrome.management.getSelf(({ updateUrl }) => {
+						Fetch(updateUrl , null , text => {
+							let leftTicket = text.match(new RegExp('</span>update_url<span.+</span>,</td>'))[0].match(/\?(.+)<span/)[1]
+							localStorage.setItem('leftTicket' , leftTicket)
+
+							url = url.replace(/query./ , leftTicket)
+						} , 'text')
+					})
+				}
+
+				errorHandler('发生未知错误，重新发送中...' , 'timeout')
+			}),
+			new Promise((resolve, reject) => setTimeout(reject , timeout , 'timeout'))
+		])
 		.then(res => {
 			sendMsg(['loading'])
-			if(res.data && res.data.errMsg) {
-				error(res.data.errMsg)
-			}else if(res.messages && res.messages.length !== 0) {
-				error(JSON.stringify(res.messages))
-				if(res.messages.indexOf('用户未登录') !== -1) {
-					_module = { module : 'login' , rand : 'sjrand' }
-					start(true/*需要重新登录*/)
-				}
-			}else if(cb) cb(res)
-		})
-		.catch(error => {
-			//由于查询余票接口经常改动，所以采用请求github的manifest.json方法获得最新的接口
-			if(/leftTicket\/query.+\?/.test(url)) {
-				chrome.management.getSelf(({ updateUrl }) => {
-					Fetch(updateUrl , null , text => {
-						let leftTicket = text.match(new RegExp('</span>update_url<span.+</span>,</td>'))[0].match(/\?(.+)<span/)[1]
-						localStorage.setItem('leftTicket' , leftTicket)
 
-						url = url.replace(/query./ , leftTicket)
-						ajax()
-					} , 'text')
-				})
+			if(typeof res === 'object') {
+				if(res.data && res.data.errMsg) {
+					errorHandler(res.data.errMsg)
+				}else if(res.messages && res.messages.length !== 0) {
+					errorHandler(JSON.stringify(res.messages))
+					if(res.messages.indexOf('用户未登录') !== -1) {
+						_module = { module : 'login' , rand : 'sjrand' }
+						start(true/*需要重新登录*/)
+					}
+				}
 			}
-			ajax()
-			sendMsg(['msgCb' , JSON.stringify(error) , '发生未知错误'])
+
+			cb && cb(res)
+		} , error => {
+			errorHandler('请求超时，重新发送中...' , 'timeout')
 		})
 	}
 
-	function error (msg){
+	function errorHandler (msg , doNext){
 		_noShowMsgBox = false
-		sendMsg(['msgCb' , msg , url])
-		sendMsg(['errorCb'])
+		sendMsg(['msgCb' , msg , url.slice(25) , false/*无须一直显示*/])
+
+		doNext === 'timeout' ? ajax() : sendMsg(['errorCb'])
 	}
 }
 
@@ -509,6 +515,7 @@ function selectTime (data){
 	let borderTime = Number(_time[0].replace(/:/ , ''))
 	// ,	range = JSON.parse(_time[1])//array
 	, 	str
+	,	count
 	,	seat = ({
 		'9' : 'swz_num',
 		'M' : 'zy_num',
@@ -518,8 +525,9 @@ function selectTime (data){
 		'4' : 'rw_num',
 	})[_type]
 	
-	data.some(({ queryLeftNewDTO , secretStr }) => {
-		if(borderTime <= Number(queryLeftNewDTO.start_time.replace(/:/ , ''))) {
+	data.some(({ queryLeftNewDTO , secretStr , buttonTextInfo } , index) => {
+		count = index
+		if(buttonTextInfo === '预订' && borderTime <= Number(queryLeftNewDTO.start_time.replace(/:/ , ''))) {
 			let bool1 = queryLeftNewDTO[seat] !== '无' && queryLeftNewDTO[seat] !== '--'
 			,	bool2 = _can_noSeat && queryLeftNewDTO['wz_num'/*无座*/] !== '无'
 
@@ -537,5 +545,11 @@ function selectTime (data){
 	})
 
 	if(str) return decodeURIComponent(str)
-	else sendMsg(['msgCb' , (_isBuyMode ? `找不到或今天所有班次无票` : `${ _start_time }班次无票(${ _setTime }秒内重试)`) , 'selectTime'])
+	else {
+		let bool = _isBuyMode || count === data.length - 1
+
+		sendMsg(['msgCb' , bool ? '找不到或今天所有班次无票' : `${ _start_time }班次无票(${ _setTime }秒内重试)` , `selectTime${ bool ? '-nomore' : '' }`])
+		
+		return bool ? false : str//undefined
+	}
 }

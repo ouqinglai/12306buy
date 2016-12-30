@@ -172,29 +172,34 @@ function login (cb){
 
 //3、查票
 function queryTicket (_undefined){
-	//GET
-	Fetch(`${ _ctx }leftTicket/${ localStorage.getItem('leftTicket') || 'queryA' }?${ ObjStringData({//GET
-		'leftTicketDTO.train_date':_toDate,
-		'leftTicketDTO.from_station':_from[1],
-		'leftTicketDTO.to_station':_to[1],
-		'purpose_codes':'ADULT',
-	}) }` , null , res => {
-		if(_secretStr = selectTime(res.data)) {
-			let { train_no , from_station_no , to_station_no , seat_types } = _ticketInfo._other
+	//去哪儿询票api
+	Fetch('http://train.qunar.com/dict/open/s2s.do?' + ObjStringData({
+		dptStation : _from[0],
+		arrStation : _to[0],
+		date : _toDate,
+		type : 'normal',
+		user : 'neibu',
+		source : 'site',
+		start : 1,
+		num : 500,
+		sort : 3,
+	}) , null , res => {
+		let returnStr = selectTime(res.data.s2sBeanList)
 
-			//获取座位类型价格
-			Fetch(_ctx + 'leftTicket/queryTicketPrice?' + ObjStringData({
-				train_no,
-				from_station_no,
-				to_station_no,
-				seat_types,
-				train_date : _toDate,
-			}) , null , ({ data }) => {
-				/*data : {"OT":[],"WZ":"¥70.0","M":"¥90.0","O":"¥70.0","train_no":"6c000C767902"}*/
-				Object.assign(_ticketInfo._other , data)
-				orderTicket()
+		if(returnStr === '__query__') {
+			Fetch(`${ _ctx }leftTicket/${ localStorage.getItem('leftTicket') || 'queryA' }?${ ObjStringData({//GET
+				'leftTicketDTO.train_date':_toDate,
+				'leftTicketDTO.from_station':_from[1],
+				'leftTicketDTO.to_station':_to[1],
+				'purpose_codes':'ADULT',
+			}) }` , null , res => {
+				res.data.some(({ queryLeftNewDTO : { start_time } , secretStr }) => {
+					if(start_time === _start_time) return _secretStr = decodeURIComponent(secretStr)
+				})
+
+				_secretStr ? orderTicket() : queryTicket()
 			})
-		}else if(!_isBuyMode && _secretStr === _undefined) {
+		}else if(!_isBuyMode && returnStr === _undefined) {
 			//用于判断_start_time是否发生了变化，说明之前班次已停止售票
 			if(_old_start_time !== _start_time) {
 				if(_old_start_time) {
@@ -229,13 +234,19 @@ function orderTicket (){
 //5、获取订单html
 function getTicketHtml (){
 	Fetch(_ctx + 'confirmPassenger/initDc' , {} , text => {
-		Object.assign(_ticketInfo , JSON.parse(text.match(/var ticketInfoForPassengerForm.+\};/)[0].replace(/(var ticketInfoForPassengerForm=|\;)/g , '').replace(/\'/g , '"')))
+		let match = text.match(/var ticketInfoForPassengerForm.+\};/)
 
-		_token = text.match(/var globalRepeatSubmitToken.+\;/)[0].replace(/(.+\s|\'|\;)/g , '')
+		if(match) {
+			Object.assign(_ticketInfo , JSON.parse(match[0].replace(/(var ticketInfoForPassengerForm=|\;)/g , '').replace(/\'/g , '"')))
 
-		let isTimeout = ((new Date(_toDate + ' ' + _start_time).getTime() - new Date(_toDate + ' ' + _time[0]).getTime()) / 1000 / 60) > 30/*大于30分钟时要询问用户是否还买票*/
+			_token = text.match(/var globalRepeatSubmitToken.+\;/)[0].replace(/(.+\s|\'|\;)/g , '')
 
-		_isBuyMode && !isTimeout ? start() : createNotice()
+			let isTimeout = ((new Date(_toDate + ' ' + _start_time).getTime() - new Date(_toDate + ' ' + _time[0]).getTime()) / 1000 / 60) > 30/*大于30分钟时要询问用户是否还买票*/
+
+			_isBuyMode && !isTimeout ? start() : createNotice()
+		}else {
+			orderTicket()
+		}
 	} , 'text')
 }
 
@@ -381,7 +392,7 @@ function Fetch (url , data , cb , resType = 'json'){
 			'Upgrade-Insecure-Requests' : 1//让loginAysnSuggest请求通过
 		}
 	}
-	,	timeout = 3500//timeout 3.5s
+	,	timeout = 4000//timeout 4s
 
 	if(data) {
 		other.method = 'POST'
@@ -401,22 +412,7 @@ function Fetch (url , data , cb , resType = 'json'){
 		//这里使用Promise.race，以最快 resolve 或 reject 的结果来传入后续绑定的回调
 		Promise.race([
 			fetch(url , other)
-			.then(res => res[resType]())
-			.catch(error => {
-				//由于查询余票接口经常改动，所以采用请求github的manifest.json方法获得最新的接口
-				if(/leftTicket\/query.+\?/.test(url)) {
-					chrome.management.getSelf(({ updateUrl }) => {
-						Fetch(updateUrl , null , text => {
-							let leftTicket = text.match(new RegExp('</span>update_url<span.+</span>,</td>'))[0].match(/\?(.+)<span/)[1]
-							localStorage.setItem('leftTicket' , leftTicket)
-
-							url = url.replace(/query./ , leftTicket)
-						} , 'text')
-					})
-				}
-
-				errorHandler('发生未知错误，重新发送中...' , 'timeout')
-			}),
+			.then(res => res[resType]()),
 			new Promise((resolve, reject) => setTimeout(reject , timeout , 'timeout'))
 		])
 		.then(res => {
@@ -430,6 +426,8 @@ function Fetch (url , data , cb , resType = 'json'){
 					if(res.messages.indexOf('用户未登录') !== -1) {
 						_module = { module : 'login' , rand : 'sjrand' }
 						start(true/*需要重新登录*/)
+					}else if(res.messages.indexOf('非法请求') !== -1 && /leftTicket\/query.+\?/.test(url)) {
+						throw '123123'
 					}
 				}
 			}
@@ -438,13 +436,33 @@ function Fetch (url , data , cb , resType = 'json'){
 		} , error => {
 			errorHandler('请求超时，重新发送中...' , 'timeout')
 		})
+		.catch(error => {
+			//由于查询余票接口经常改动，所以采用请求github的manifest.json方法获得最新的接口
+			if(/leftTicket\/query.+\?/.test(url)) {
+				chrome.management.getSelf(({ updateUrl }) => {
+					Fetch(updateUrl , null , text => {
+						let leftTicket = text.match(new RegExp('</span>update_url<span.+</span>,</td>'))[0].match(/\?(.+)<span/)[1]
+						localStorage.setItem('leftTicket' , leftTicket)
+
+						url = url.replace(/query./ , leftTicket)
+						ajax()
+					} , 'text')
+				})
+			}else {
+				errorHandler('发生未知错误，重新发送中...' , 'timeout')
+			}
+		})
 	}
 
 	function errorHandler (msg , doNext){
+		let bool = doNext === 'timeout'
+
+		bool ? ajax() : sendMsg(['errorCb'])
+
+		if(_noShowMsgBox && bool) return
+
 		_noShowMsgBox = false
 		sendMsg(['msgCb' , msg , url.slice(25) , false/*无须一直显示*/])
-
-		doNext === 'timeout' ? ajax() : sendMsg(['errorCb'])
 	}
 }
 
@@ -480,11 +498,11 @@ function createNotice (){
 	,	otherInfo = _ticketInfo._other
 
 	if(_is_buy_noSeat) {
-		message = `(无座票  ${ otherInfo.WZ }  !!!)`
+		message = `(无座票  ${ otherInfo['无座'].price + '元' }  !!!)`
 	}else {
-		_ticketInfo.leftDetails.forEach((_seat , index) => {
-			if(_seat.match(_typeArray[_type])) message = _ticketInfo.leftDetails[index].replace('--' , `  ${ otherInfo[_type] }  `)
-		})
+		let { price , count } = otherInfo[_typeArray[_type]]
+
+		message = `${ _typeArray[_type] }(  ${ price }元  ) ${ count }张`
 	}
 
 	_noShowMsgBox = false
@@ -504,7 +522,7 @@ function createNotice (){
 		title,//广州南 到 北京西(日期)
 		message,//硬卧(426.00元)15张票
 		iconUrl : 'logo.png',
-		contextMessage : otherInfo.station_train_code + '   历时' + otherInfo.lishi + '   出发时间' + _start_time,//火车型号G123  历时  出发时间
+		contextMessage : otherInfo.trainNo + '   历时' + otherInfo.lishi + '   出发时间' + _start_time,//火车型号G123  历时  出发时间
 		requireInteraction : true,//一直显示
 		buttons,
 	})
@@ -516,35 +534,32 @@ function selectTime (data){
 	// ,	range = JSON.parse(_time[1])//array
 	, 	str
 	,	count
-	,	seat = ({
-		'9' : 'swz_num',
-		'M' : 'zy_num',
-		'O' : 'ze_num',
-		'1' : 'yz_num',
-		'3' : 'yw_num',
-		'4' : 'rw_num',
-	})[_type]
 	
-	data.some(({ queryLeftNewDTO , secretStr , buttonTextInfo } , index) => {
+	data.some(({ saleStatus : { desc } , seats , dptTime , trainNo , extraBeanMap : { interval } } , index) => {
 		count = index
-		if(buttonTextInfo === '预订' && borderTime <= Number(queryLeftNewDTO.start_time.replace(/:/ , ''))) {
-			let bool1 = queryLeftNewDTO[seat] !== '无' && queryLeftNewDTO[seat] !== '--'
-			,	bool2 = _can_noSeat && queryLeftNewDTO['wz_num'/*无座*/] !== '无'
 
-			_start_time = queryLeftNewDTO.start_time
+		if(desc === '可预订' && borderTime <= Number(dptTime.replace(/:/ , ''))) {
+			let bool1 = seats[_typeArray[_type]].count > 0
+			,	bool2 = _can_noSeat && seats['无座'].count > 0
+
+			_start_time = dptTime
+
 			if(bool1 || bool2) {
 				_is_buy_noSeat = !bool1 && bool2
 
-				str = secretStr
+				str = '__query__'
 
-				_ticketInfo._other = queryLeftNewDTO//记录火车型号G123、历史时间、to_station_no、seat_types等
+				seats.trainNo = trainNo
+				seats.lishi = interval
+
+				_ticketInfo._other = seats
 			}
 
 			return !_isBuyMode || (_isBuyMode && str) ? true : false//return true跳出some循环
-		} 
+		}
 	})
 
-	if(str) return decodeURIComponent(str)
+	if(str) return str
 	else {
 		let bool = _isBuyMode || count === data.length - 1
 

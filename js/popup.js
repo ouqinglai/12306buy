@@ -16,7 +16,7 @@ var url1 = 'https://kyfw.12306.cn/otn/'
 ,	$submit = $('#order_submit')
 
 /* init */
-$('[name="to_date"]').value = new Date().toLocaleDateString().replace(/\//g , '-')
+$('[name="to_date"]').value = new Date().toISOString().split('T')[0]
 $('[name="time"]').value = new Date().toTimeString().match(/\d+:\d+/)[0]
 
 //读取12306账户信息

@@ -411,8 +411,7 @@ function Fetch (url , data , cb , resType = 'json'){
 	function ajax (){
 		//这里使用Promise.race，以最快 resolve 或 reject 的结果来传入后续绑定的回调
 		Promise.race([
-			fetch(url , other)
-			.then(res => res[resType]()),
+			fetch(url , other).then(res => res[resType]()),
 			new Promise((resolve, reject) => setTimeout(reject , timeout , 'timeout'))
 		])
 		.then(res => {
@@ -426,17 +425,17 @@ function Fetch (url , data , cb , resType = 'json'){
 					if(res.messages.indexOf('用户未登录') !== -1) {
 						_module = { module : 'login' , rand : 'sjrand' }
 						start(true/*需要重新登录*/)
-					}else if(res.messages.indexOf('非法请求') !== -1 && /leftTicket\/query.+\?/.test(url)) {
-						throw '123123'
+					}else if(res.messages.indexOf('非法请求') !== -1) {
+						throw '查票接口更换'
 					}
 				}
 			}
 
 			cb && cb(res)
-		} , error => {
+		} , /*捕获超时错误*/error => {
 			errorHandler('请求超时，重新发送中...' , 'timeout')
 		})
-		.catch(error => {
+		.catch(/*捕获请求接口错误*/error => {
 			//由于查询余票接口经常改动，所以采用请求github的manifest.json方法获得最新的接口
 			if(/leftTicket\/query.+\?/.test(url)) {
 				chrome.management.getSelf(({ updateUrl }) => {

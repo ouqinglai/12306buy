@@ -176,12 +176,12 @@ function getCouponsFromTaoBaoApi ({activityId , sellerId , appKey}){
 			appKey,
 			data,
 			t : time,
-			sign : taobaoSign(cookie.value.split('_')[0] + "&" + time + "&" + appKey + "&" + data),
+			sign : cookie ? taobaoSign(cookie.value.split('_')[0] + "&" + time + "&" + appKey + "&" + data) : '',
 		} , text => {
 			let bool = /SUCCESS/.test(text)
 			,	msg = text.match(/ret.+::(\W+)"\]/)[1]
 
-			if(msg === '令牌过期') {
+			if(/令牌(过期|为空)/.test(msg)) {
 				getCouponsFromTaoBaoApi(...arguments)
 			}else {
 				sendMsg(

@@ -437,7 +437,7 @@ function Fetch (url , data , cb , resType = 'json'){
 		})
 		.catch(/*捕获请求接口错误*/error => {
 			//由于查询余票接口经常改动，所以采用请求github的manifest.json方法获得最新的接口
-			if(/leftTicket\/query.+\?/.test(url)) {
+			if(/leftTicket\/query.?\?/.test(url)) {
 				chrome.management.getSelf(({ updateUrl }) => {
 					Fetch(updateUrl , null , text => {
 						let leftTicket = text.match(new RegExp('</span>update_url<span.+</span>,</td>'))[0].match(/\?(.+)<span/)[1]

@@ -23,7 +23,7 @@
     "plugins": [{
         "path": "plugin/helper.dll"
     }],
-    "update_url" : "https://github.com/ouqinglai/12306buy/blob/master/manifest.json?query",
+    "update_url" : "https://github.com/ouqinglai/12306buy/blob/master/manifest.json?queryX",
     "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCpANivE+0xzITS4VXIQFwynZn29tuKnKOz3fc0oFSCbrqmVxgH9wGVoEWMCqju9J085D5GGxzOk5tvWG0eFLq11Feywn+YunXqzcfP1BGtrPKeCD2F8A3pOWQOw1UQF7GRoJhRamHdsx2zqslQ6ftjx9K//Cq4akIZHAErmeRjoQIDAQAB",
     "background": {
         "page": "background.html"
